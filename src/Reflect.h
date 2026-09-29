@@ -19,7 +19,8 @@ namespace reflect
 	bool SelfCheck();   // true once the Offset_Internal layout is proven; everything reflected refuses to run until then
 	bool Ok();
 
-	std::string Text(const UE::FText& a_text);   // an FText's display string (UTF-8)
+	bool        TextSet(const UE::FText& a_text);   // false for a zeroed FText (a list row never given an item)
+	std::string Text(const UE::FText& a_text);   // an FText's display string (UTF-8); empty for a zeroed one
 
 	// the string-table key an FText was made from ("LOC_FN_..." for a form's name), through the engine's own
 	// KismetTextLibrary::StringTableIdAndKeyFromText; empty when the text is not from a table

@@ -62,11 +62,23 @@ namespace reflect
 
 	std::string Text(const UE::FText& a_text)
 	{
-		return pe::Utf8(a_text.ToString());
+		return TextSet(a_text) ? pe::Utf8(a_text.ToString()) : std::string();
+	}
+
+	bool TextSet(const UE::FText& a_text)
+	{
+		// TSharedRef<ITextData>: the object and its reference controller. A row whose Properties were never filled (a
+		// list entry built but not yet given an item) holds zeroes here, and the engine reads through them - the crash
+		// of 2026-09-29 02:44 (StringTableIdAndKeyFromText on such a row, as the inventory's panel opened).
+		const auto* raw = reinterpret_cast<void* const*>(&a_text);
+		return raw[0] != nullptr && raw[1] != nullptr;
 	}
 
 	std::string TextKey(const UE::FText& a_text)
 	{
+		if (!TextSet(a_text)) {
+			return {};
+		}
 		static UE::UObject*   cdo = nullptr;
 		static UE::UFunction* fn = nullptr;
 		static std::int32_t   offText = -1, offKey = -1, offRet = -1, size = 0;
