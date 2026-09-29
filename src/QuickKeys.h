@@ -12,8 +12,8 @@
 //     native-to-native and never reach ProcessEvent, so the chosen slot is read from the view model's KeyIndex.
 //   * KeyIndex numbering: clockwise, 45 degrees a slot, 1 at the TOP (0 top-left ... 3 right ... 5 bottom ... 7 left).
 //
-// This module hooks ProcessEvent (vtable slot 0x4D of the widget - the shared UObject::ProcessEvent), filters on the
-// widget's class, and turns those calls into three events for the rest of the mod. Everything is NULL-guarded and
+// This module swaps the widget's vtable entry for ProcessEvent (slot 0x4D) - no code patch, so it coexists with
+// UE4SS's ProcessEvent hook in either order - filters on the widget's class, and turns those calls into three events for the rest of the mod. Everything is NULL-guarded and
 // records its result for the self-check (memory: guards-and-a-selfcheck-report-in-every-build).
 // ============================================================================================================
 

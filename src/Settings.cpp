@@ -32,7 +32,7 @@ namespace settings
 
 	void Load()
 	{
-		const auto ini = PluginFolder() / L"PerfectedWheeler.ini";
+		const auto ini = PluginFolder() / L"ImprovedWheelMenu.ini";
 		Values v;
 		if (std::filesystem::exists(ini)) {
 			v.logLevel = ReadInt(ini, L"Log", L"uLogLevel", v.logLevel, 0, 4);

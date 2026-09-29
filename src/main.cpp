@@ -1,4 +1,4 @@
-// Perfected Wheeler for Oblivion Remastered - entry point.
+// Improved Wheel Menu (Oblivion Remastered) - entry point.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "QuickKeys.h"
@@ -18,12 +18,12 @@ namespace
 	void WriteSelfCheck()
 	{
 		const auto s = quickkeys::GetStatus();
-		const auto path = settings::PluginFolder() / L"PerfectedWheeler.selfcheck.txt";
+		const auto path = settings::PluginFolder() / L"ImprovedWheelMenu.selfcheck.txt";
 		std::string text = std::format(
-			"Perfected Wheeler {} self-check\n"
+			"Improved Wheel Menu {} self-check\n"
 			"widget class found: {}\nview model found: {}\nProcessEvent hook: {}\n"
 			"radial open now: {}\npointed slot: {} ({})\nlast chosen slot: {} ({})\nopens this session: {}\nproblem: {}\n",
-			PW_VERSION, s.widgetClassFound ? "yes" : "no", s.viewModelFound ? "yes" : "no", s.hookInstalled ? "installed" : "NOT installed",
+			IWM_VERSION, s.widgetClassFound ? "yes" : "no", s.viewModelFound ? "yes" : "no", s.hookInstalled ? "installed" : "NOT installed",
 			s.open ? "yes" : "no", s.pointedSlot, SlotWord(s.pointedSlot), s.lastChosenSlot, SlotWord(s.lastChosenSlot), s.opens,
 			s.problem.empty() ? "none" : s.problem);
 		FILE* f = nullptr;
@@ -78,7 +78,7 @@ OBSE_PLUGIN_LOAD(const OBSE::LoadInterface* a_obse)
 		const auto level = static_cast<spdlog::level::level_enum>(std::clamp(settings::Get().logLevel, 0, 4));
 		logger::set_level(level, level);
 	}
-	logger::info("Perfected Wheeler {} loaded (Oblivion Remastered)", PW_VERSION);
+	logger::info("Improved Wheel Menu {} loaded (Oblivion Remastered)", IWM_VERSION);
 
 	if (auto* messaging = OBSE::GetMessagingInterface()) {
 		if (!messaging->RegisterListener(&OnMessage)) {

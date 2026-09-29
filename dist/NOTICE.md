@@ -1,4 +1,4 @@
-# Perfected Wheeler for Oblivion Remastered - copyright and licence
+# Improved Wheel Menu (Oblivion Remastered) - copyright and licence
 
 Copyright (C) 2026 ApocryphaRealm
 

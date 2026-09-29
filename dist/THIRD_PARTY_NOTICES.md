@@ -1,7 +1,7 @@
 # Third-party components and their notices
 
-Perfected Wheeler for Oblivion Remastered as a whole is GPL-3.0-or-later (`LICENSE`, `NOTICE.md`). Every component
-below is linked into PerfectedWheeler.dll; each is under a GPL-compatible licence, and its notice is reproduced as
+Improved Wheel Menu (Oblivion Remastered) as a whole is GPL-3.0-or-later (`LICENSE`, `NOTICE.md`). Every component
+below is linked into ImprovedWheelMenu.dll; each is under a GPL-compatible licence, and its notice is reproduced as
 that licence requires. Versions are the ones this build pins.
 
 ## CommonLibOB64 and commonlib-shared - GPL-3.0
@@ -30,29 +30,3 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER I
 OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 (This build uses spdlog's std::format backend; the fmt library is not linked.)
-
-## MinHook 1.3.4 - BSD 2-Clause
-
-MinHook - The Minimalistic API Hooking Library for x64/x86
-Copyright (C) 2009-2017 Tsuda Kageyu.
-All rights reserved.
-
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
-following conditions are met:
-
- 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following
-    disclaimer.
- 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following
-    disclaimer in the documentation and/or other materials provided with the distribution.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
-INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-Portions of MinHook are Copyright (c) 2008-2009, Vyacheslav Patkov (Hacker Disassembler Engine 32 C and 64 C), under
-the same two-clause licence and disclaimer as above.
-

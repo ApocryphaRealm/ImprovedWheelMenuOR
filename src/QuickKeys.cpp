@@ -1,6 +1,5 @@
 #include "QuickKeys.h"
 
-#include <MinHook.h>
 
 namespace quickkeys
 {
@@ -119,6 +118,12 @@ namespace quickkeys
 					g_status.pointedSlot = a_slot;
 					break;
 				case Event::kClosed:
+					// the widget collapses itself once as the menu layer is built (main menu, no open before it):
+					// that is not the player closing the radial, and it chose nothing
+					if (!g_status.open) {
+						logger::debug("quick keys: collapsed while not open (widget set-up) - ignored");
+						return;
+					}
 					g_status.open = false;
 					g_status.lastChosenSlot = a_slot;
 					break;
@@ -165,9 +170,14 @@ namespace quickkeys
 			}
 		}
 
+		// The widget's ProcessEvent is reached through its C++ vtable (slot 0x4D). The entry in THAT vtable is swapped
+		// for ours - no code is patched. UE4SS hooks UObject::ProcessEvent's code (the shared body), so the pointer
+		// read from the slot below is whatever UE4SS left there, and every call still reaches it: the two coexist in
+		// either load order. A MinHook on the body (this module's first build) broke UE4SS's own hook when it landed
+		// first, and crashed in this function with Ultimate Combat Redux's watcher (logic library 7555, 2026-09-28).
+		// The vtable is shared by the native class's other instances, so the class filter above stays.
 		bool InstallHook(UE::UClass* a_widgetClass)
 		{
-			// The class default object shares the instances' vtable: its ProcessEvent slot is the function to hook.
 			auto* cdo = a_widgetClass ? a_widgetClass->GetDefaultObject(false) : nullptr;
 			if (!cdo) {
 				SetProblem("widget class has no default object yet");
@@ -178,20 +188,22 @@ namespace quickkeys
 				SetProblem("widget vtable unreadable");
 				return false;
 			}
-			void* target = vtable[kProcessEventSlot];
-			const MH_STATUS init = MH_Initialize();   // shared with any other MinHook user in-process
-			if (init != MH_OK && init != MH_ERROR_ALREADY_INITIALIZED) {
-				SetProblem(std::format("MH_Initialize: {}", static_cast<int>(init)));
+			void** slot = &vtable[kProcessEventSlot];
+			if (*slot == reinterpret_cast<void*>(&HookedProcessEvent)) {
+				return true;   // already ours
+			}
+			DWORD oldProtect = 0;
+			if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
+				SetProblem(std::format("VirtualProtect on the vtable slot failed ({})", GetLastError()));
 				return false;
 			}
-			void* original = nullptr;
-			const MH_STATUS created = MH_CreateHook(target, reinterpret_cast<void*>(&HookedProcessEvent), &original);
-			if (created != MH_OK || MH_EnableHook(target) != MH_OK) {
-				SetProblem(std::format("MinHook refused ProcessEvent at {:p} ({})", target, static_cast<int>(created)));
-				return false;
-			}
-			g_original = reinterpret_cast<ProcessEvent_t>(original);
-			logger::info("quick keys: ProcessEvent hooked at {:p} (widget class {:p})", target, static_cast<void*>(a_widgetClass));
+			g_original = reinterpret_cast<ProcessEvent_t>(*slot);
+			*slot = reinterpret_cast<void*>(&HookedProcessEvent);
+			DWORD ignored = 0;
+			VirtualProtect(slot, sizeof(void*), oldProtect, &ignored);
+			logger::info("quick keys: widget vtable slot 0x{:X} at {:p} now ours (previous target {:p}, UE4SS {})",
+				kProcessEventSlot, static_cast<void*>(slot), reinterpret_cast<void*>(g_original),
+				GetModuleHandleW(L"UE4SS.dll") ? "loaded" : "not loaded");
 			return true;
 		}
 	}
