@@ -43,7 +43,10 @@ namespace quickkeys
 	using Icons = std::array<UE::UObject*, 8>;
 	Icons ReadIcons();
 	int   WriteIcons(const Icons& a_icons);
-	int   DrawIcons(const Icons& a_icons);   // draws straight onto every wheel widget (returns how many were drawn)
+	// draws straight onto every wheel widget - only the slots where a_icons differs from a_shown (what the widgets
+	// show now); returns the pictures set
+	int   DrawIcons(const Icons& a_icons, const Icons& a_shown);
+	bool  TakeGameDrew();   // the game drew its own pictures since the last call (the widgets show the view model's again)
 
 	struct Status
 	{

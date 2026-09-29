@@ -26,6 +26,10 @@ namespace quickkeys
 		// The two UFunction names we act on, compared once per distinct UFunction* and remembered.
 		UE::UFunction* g_fnVisibility = nullptr;
 		UE::UFunction* g_fnKeyIndex = nullptr;
+		UE::UFunction* g_fnUpdateIcons = nullptr;    // the game (re)draws all eight pictures
+		UE::UFunction* g_fnSetKeyPicture = nullptr;  // SetQuickKeyByIndex: one picture
+		std::atomic<bool> g_gameDrew{ false };      // the game drew pictures since the last TakeGameDrew()
+		bool g_drawing = false;                     // our own SetQuickKeyByIndex calls (game thread only)
 		std::atomic<int> g_frame{ 0 };
 
 		std::string Utf8(const UE::FString& a_s)
@@ -180,9 +184,20 @@ namespace quickkeys
 				if (a_params) { OnVisibility(a_obj, *static_cast<const std::uint8_t*>(a_params)); }
 			} else if (a_fn == g_fnKeyIndex) {
 				if (a_params) { Emit(Event::kPointed, *static_cast<const std::int32_t*>(a_params)); }
-			} else if (!g_fnVisibility || !g_fnKeyIndex) {
-				// still learning the two UFunction pointers: one name compare per unknown function
+			} else if (a_fn == g_fnUpdateIcons || (a_fn == g_fnSetKeyPicture && !g_drawing)) {
+				g_gameDrew.store(true);
+			} else if (!g_fnVisibility || !g_fnKeyIndex || !g_fnUpdateIcons || !g_fnSetKeyPicture) {
+				// still learning the UFunction pointers: one name compare per unknown function
 				const std::string n = pe::FunctionName(a_fn);
+				if (!g_fnUpdateIcons && n == "UpdateIcons") {
+					g_fnUpdateIcons = a_fn;
+					g_gameDrew.store(true);
+				} else if (!g_fnSetKeyPicture && n == "SetQuickKeyByIndex") {
+					g_fnSetKeyPicture = a_fn;
+					if (!g_drawing) {
+						g_gameDrew.store(true);
+					}
+				}
 				if (!g_fnVisibility && n == "OnVisibilityChangedEvent") {
 					g_fnVisibility = a_fn;
 					if (a_params) { OnVisibility(a_obj, *static_cast<const std::uint8_t*>(a_params)); }
@@ -279,7 +294,12 @@ namespace quickkeys
 		return n;
 	}
 
-	int DrawIcons(const Icons& a_icons)
+	bool TakeGameDrew()
+	{
+		return g_gameDrew.exchange(false);
+	}
+
+	int DrawIcons(const Icons& a_icons, const Icons& a_shown)
 	{
 		// every wheel widget (the HUD's, the inventory's and the magic menu's): SetQuickKeyByIndex(Index, texture) - the
 		// widget's own drawing call (UVModernQuickKeysMenu, a BlueprintImplementableEvent)
@@ -313,17 +333,23 @@ namespace quickkeys
 			}
 			return 0;
 		}
+		// only the slots that differ: each call is the widget's own "a slot changed" (it animates and clicks)
 		int drawn = 0;
 		std::vector<std::uint8_t> params(static_cast<std::size_t>(size));
+		g_drawing = true;
 		for (auto* w : widgets) {
 			for (int i = 0; i < static_cast<int>(a_icons.size()); ++i) {
+				if (a_icons[i] == a_shown[i]) {
+					continue;
+				}
 				std::fill(params.begin(), params.end(), std::uint8_t{ 0 });
 				*reinterpret_cast<std::int32_t*>(params.data() + offIndex) = i;
 				*reinterpret_cast<UE::UObject**>(params.data() + offTexture) = a_icons[i];
 				w->ProcessEvent(fn, params.data());
+				++drawn;
 			}
-			++drawn;
 		}
+		g_drawing = false;
 		return drawn;
 	}
 

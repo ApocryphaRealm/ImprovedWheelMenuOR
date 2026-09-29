@@ -178,20 +178,24 @@ namespace wheels
 		// key we moved goes black (read 2026-09-29). While the wheel is on screen, each Equipment slot holding an item
 		// whose picture a row has shown is kept at that picture (throttled: the inventory walk is not free).
 		// What is DRAWN is set on the wheel widgets themselves (quickkeys::DrawIcons); the view model keeps the game's
-		// own eight pictures untouched, so it is always the truth for "the game's keys". Redrawn when the wanted set
-		// changes, and every 250 ms while shown (the game redraws the widget from the view model when it refreshes).
-		quickkeys::Icons                      g_lastDrawn{};
-		std::chrono::steady_clock::time_point g_nextRedraw{};
+		// own eight pictures untouched, so it is always the truth for "the game's keys". A slot is drawn only when it
+		// must change: every SetQuickKeyByIndex is the widget's "slot changed" and clicks (the owner heard a stream of
+		// clicks while an earlier build redrew all eight every 250 ms). After the game draws its own (UpdateIcons),
+		// the widgets show the view model's pictures again, so only the slots that differ from those are redrawn.
+		quickkeys::Icons g_shownNow{};       // what the widgets show, as far as we know
+		bool             g_shownKnown = false;
 
-		void Draw(const quickkeys::Icons& a_icons, bool a_force)
+		void Draw(const quickkeys::Icons& a_icons, bool /*a_force*/)
 		{
-			const auto now = std::chrono::steady_clock::now();
-			if (!a_force && a_icons == g_lastDrawn && now < g_nextRedraw) {
+			if (quickkeys::TakeGameDrew() || !g_shownKnown) {
+				g_shownNow = quickkeys::ReadIcons();
+				g_shownKnown = true;
+			}
+			if (a_icons == g_shownNow) {
 				return;
 			}
-			g_nextRedraw = now + 250ms;
-			g_lastDrawn = a_icons;
-			quickkeys::DrawIcons(a_icons);
+			quickkeys::DrawIcons(a_icons, g_shownNow);
+			g_shownNow = a_icons;
 		}
 
 		// The game refreshes its pictures only when IT assigns a key, so a slot whose key we moved shows the old or no
@@ -219,7 +223,7 @@ namespace wheels
 					ours = true;
 				}
 			}
-			if (ours || icons != g_lastDrawn) {
+			if (ours) {
 				Draw(icons, false);
 			}
 		}
