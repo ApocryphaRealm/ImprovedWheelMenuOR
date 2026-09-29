@@ -2,6 +2,7 @@
 
 #include "Menus.h"
 #include "PEHook.h"
+#include "Reflect.h"
 
 
 namespace quickkeys
@@ -242,6 +243,88 @@ namespace quickkeys
 		}
 		std::scoped_lock l(g_statusLock);
 		g_status.pointedSlot = -1;
+	}
+
+	Icons ReadIcons()
+	{
+		Icons out{};
+		auto* cls = g_viewModelClass.load(std::memory_order_acquire);
+		const std::int32_t off = cls && reflect::Ok() ? reflect::Offset(cls, "Icons") : -1;
+		auto* f = KeyIndexField();   // also refreshes g_viewModel
+		auto* vm = g_viewModel.load(std::memory_order_acquire);
+		if (!f || !vm || off < 0) {
+			return out;
+		}
+		struct RawArray { UE::UObject** data; std::int32_t num; std::int32_t max; };
+		const auto* arr = reflect::At<RawArray>(vm, off);
+		for (std::int32_t i = 0; arr && arr->data && i < arr->num && i < static_cast<std::int32_t>(out.size()); ++i) {
+			out[i] = arr->data[i];
+		}
+		return out;
+	}
+
+	int WriteIcons(const Icons& a_icons)
+	{
+		auto* cls = g_viewModelClass.load(std::memory_order_acquire);
+		if (!cls || !reflect::Ok()) {
+			return 0;
+		}
+		Icons copy = a_icons;
+		struct Params { UE::UObject** data; std::int32_t num; std::int32_t max; } params{ copy.data(), static_cast<std::int32_t>(copy.size()),
+			static_cast<std::int32_t>(copy.size()) };
+		int n = 0;
+		for (auto* vm : reflect::Instances(cls)) {
+			n += reflect::Call(vm, L"SetIcons", &params) ? 1 : 0;
+		}
+		return n;
+	}
+
+	int DrawIcons(const Icons& a_icons)
+	{
+		// every wheel widget (the HUD's, the inventory's and the magic menu's): SetQuickKeyByIndex(Index, texture) - the
+		// widget's own drawing call (UVModernQuickKeysMenu, a BlueprintImplementableEvent)
+		auto* cls = g_widgetClass.load(std::memory_order_acquire);
+		if (!cls || !reflect::Ok()) {
+			return 0;
+		}
+		static UE::UFunction* fn = nullptr;
+		static std::int32_t   offIndex = -1, offTexture = -1, size = 0;
+		static bool           reported = false;
+		auto widgets = reflect::Instances(cls);
+		if (!fn && !widgets.empty()) {
+			fn = widgets.front()->FindFunction(UE::FName(L"SetQuickKeyByIndex", UE::EFindName::Find));
+			if (fn) {
+				auto* st = reinterpret_cast<UE::UStruct*>(fn);
+				size = st->propertiesSize;
+				for (const auto& [name, off] : reflect::Fields(st)) {
+					if (name == "Index") {
+						offIndex = off;
+					} else if (offTexture < 0) {
+						offTexture = off;   // the one other parameter: the picture
+					}
+				}
+				logger::info("quick keys: SetQuickKeyByIndex params Index 0x{:X}, picture 0x{:X}, size 0x{:X}", offIndex, offTexture, size);
+			}
+		}
+		if (!fn || offIndex < 0 || offTexture < 0 || size <= 0) {
+			if (!reported) {
+				reported = true;
+				logger::error("quick keys: the wheel widget has no usable SetQuickKeyByIndex - the Magic wheel cannot be drawn");
+			}
+			return 0;
+		}
+		int drawn = 0;
+		std::vector<std::uint8_t> params(static_cast<std::size_t>(size));
+		for (auto* w : widgets) {
+			for (int i = 0; i < static_cast<int>(a_icons.size()); ++i) {
+				std::fill(params.begin(), params.end(), std::uint8_t{ 0 });
+				*reinterpret_cast<std::int32_t*>(params.data() + offIndex) = i;
+				*reinterpret_cast<UE::UObject**>(params.data() + offTexture) = a_icons[i];
+				w->ProcessEvent(fn, params.data());
+			}
+			++drawn;
+		}
+		return drawn;
 	}
 
 	bool RadialOpen()

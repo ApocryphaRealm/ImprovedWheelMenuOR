@@ -75,6 +75,11 @@ namespace menus
 		TryWatch(g_magicClass, kMagicPath, g_magicActive, "magic menu");
 	}
 
+	bool AnyOpen()
+	{
+		return InMenuMode();
+	}
+
 	Menu Active()
 	{
 		if (!InMenuMode()) {

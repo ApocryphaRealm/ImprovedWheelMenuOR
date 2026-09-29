@@ -142,6 +142,24 @@ namespace inventory
 		return n && *n ? std::string(n) : std::format("0x{:08X}", a_formID);
 	}
 
+	std::uint32_t FindByName(const std::string& a_name)
+	{
+		auto* items = Items();
+		if (!items || a_name.empty()) {
+			return 0;
+		}
+		for (RE::ItemChange* item : *items) {
+			if (!item || !item->object || item->count <= 0) {
+				continue;
+			}
+			const char* n = RE::TESFullName::GetFullName(item->object);
+			if (n && a_name == n) {
+				return item->object->GetFormID();
+			}
+		}
+		return 0;
+	}
+
 	void ClearKey(std::uint32_t a_formID)
 	{
 		auto* item = Find(a_formID);
@@ -217,8 +235,13 @@ namespace inventory
 
 	std::string PlayerName()
 	{
+		// the name chosen at character creation lives on the player's base record; the reference itself reads "Player"
 		auto* player = RE::PlayerCharacter::GetSingleton();
-		const char* n = player ? RE::TESFullName::GetFullName(player) : nullptr;
+		auto* base = player ? player->data.objectReference : nullptr;
+		const char* n = base ? RE::TESFullName::GetFullName(base) : nullptr;
+		if (!n || !*n) {
+			n = player ? RE::TESFullName::GetFullName(player) : nullptr;
+		}
 		return n && *n ? std::string(n) : std::string("Player");
 	}
 }

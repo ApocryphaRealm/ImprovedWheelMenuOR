@@ -38,6 +38,13 @@ namespace quickkeys
 	int  PointedSlot();  // the slot under the pointer on whichever is showing, -1 for none
 	void CancelChoice(); // B on the HUD radial: the view model points at no slot, so the close uses nothing
 
+	// The eight slot pictures the radial and the menu panels draw (VQuickKeysMenuViewModel::Icons, by key 0-7).
+	// WriteIcons pushes a set through the view model's own SetIcons on every instance; returns how many took it.
+	using Icons = std::array<UE::UObject*, 8>;
+	Icons ReadIcons();
+	int   WriteIcons(const Icons& a_icons);
+	int   DrawIcons(const Icons& a_icons);   // draws straight onto every wheel widget (returns how many were drawn)
+
 	struct Status
 	{
 		bool hookInstalled = false;

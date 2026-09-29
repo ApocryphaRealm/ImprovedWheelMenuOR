@@ -33,6 +33,19 @@ namespace pad
 	using FrameCallback = void (*)();
 	void SetFrameCallback(FrameCallback a_callback);
 
+	// rule 64 (the iwm.pad TestBench tool): steps laid over the real pad, one after another, on the game thread.
+	// A step holds its buttons / triggers / right stick for ms; a step with nothing set is a pause.
+	struct Step
+	{
+		WORD          buttons = 0;
+		BYTE          lt = 0, rt = 0;
+		SHORT         rx = 0, ry = 0;
+		int           ms = 100;
+	};
+	void        Queue(const std::vector<Step>& a_steps);
+	std::size_t Queued();
+	bool        MagicPanelUp();
+
 	struct Status
 	{
 		bool          installed = false;

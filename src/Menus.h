@@ -18,5 +18,6 @@ namespace menus
 
 	void Tick();       // from the plugin's lazy thread: finds the classes once they are loaded and watches them
 	Menu Active();     // game thread or any thread
+	bool AnyOpen();    // the game is in menu mode (any menu: also containers and barter, which Active() reports as kNone)
 	const char* Name(Menu a_menu);
 }

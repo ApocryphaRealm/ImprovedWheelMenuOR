@@ -20,6 +20,7 @@ set_languages("c++23")
 set_warnings("allextra")
 
 add_rules("mode.debug", "mode.releasedbg")
+add_requires("nlohmann_json")
 add_rules("plugin.vsxmake.autoupdate")
 
 target("ImprovedWheelMenu")
@@ -29,6 +30,7 @@ target("ImprovedWheelMenu")
         description = "Improved Wheel Menu - the Quick Keys radial, augmented (Oblivion Remastered)"
     })
     add_syslinks("user32")
+    add_packages("nlohmann_json")
     on_load(function (target)
         target:add("defines", "IWM_VERSION=\"" .. (target:version() or "0.0.0") .. "\"")
     end)

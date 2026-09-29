@@ -19,6 +19,7 @@ namespace inventory
 
 	bool Has(std::uint32_t a_formID);                 // the player carries at least one
 	std::string NameOf(std::uint32_t a_formID);
+	std::uint32_t FindByName(const std::string& a_name);   // a carried item whose full name (a "LOC_FN_" key, or a custom name) matches
 
 	void ClearKey(std::uint32_t a_formID);            // takes every quick key off that item
 	void ClearSlot(int a_key);                        // takes quick key N off whichever item has it
