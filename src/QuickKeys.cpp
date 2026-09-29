@@ -17,6 +17,7 @@ namespace quickkeys
 
 		std::atomic<UE::UClass*>  g_widgetClass{ nullptr };
 		std::atomic<UE::UObject*> g_viewModel{ nullptr };
+		std::atomic<std::int32_t> g_viewModelIndex{ -1 };   // its object-array slot: checked there, never through the pointer
 		std::atomic<UE::UClass*>  g_viewModelClass{ nullptr };
 		Listener                  g_listener = nullptr;
 
@@ -56,19 +57,18 @@ namespace quickkeys
 			g_status.problem = a_why;
 		}
 
-		// A pointer is the live view model only if the object array still lists it at its own index with that class.
+		// A kept pointer is the live view model only if the slot it was found in still holds it - asked of the SLOT, never
+		// by reading the pointer (a freed object's own index is garbage: the 09:15 crash in rows) - and then of that class.
 		bool IsLive(UE::UObject* a_o, UE::UClass* a_class)
 		{
-			auto* arr = UE::FUObjectArray::GetSingleton();
-			if (!a_o || !arr) {
-				return false;
-			}
-			const std::int32_t idx = a_o->internalIndex;
-			if (idx < 0 || idx >= arr->GetObjectArrayNum()) {
-				return false;
-			}
-			auto* item = arr->IndexToObject(idx);
-			return item && reinterpret_cast<UE::UObject*>(item->object) == a_o && a_o->GetClass() == a_class;
+			auto* live = reflect::Get(a_o, g_viewModelIndex.load(std::memory_order_acquire));
+			return live && live->GetClass() == a_class;
+		}
+
+		void KeepViewModel(UE::UObject* a_live)
+		{
+			g_viewModelIndex.store(a_live ? a_live->internalIndex : -1, std::memory_order_release);
+			g_viewModel.store(a_live, std::memory_order_release);
 		}
 
 		// The one transient view model instance (not the class default object) - found by walking the object array.
@@ -101,7 +101,7 @@ namespace quickkeys
 			auto* cls = g_viewModelClass.load(std::memory_order_acquire);
 			if (!vm || !IsLive(vm, cls)) {
 				vm = FindViewModel(cls);   // recreated after a load? find it again
-				g_viewModel.store(vm, std::memory_order_release);
+				KeepViewModel(vm);
 				if (!vm) {
 					return nullptr;
 				}
@@ -235,7 +235,7 @@ namespace quickkeys
 			vmClass = UE::StaticFindObject<UE::UClass>(nullptr, nullptr, kViewModelClassPath);
 			if (vmClass) {
 				g_viewModelClass.store(vmClass, std::memory_order_release);
-				g_viewModel.store(FindViewModel(vmClass), std::memory_order_release);
+				KeepViewModel(FindViewModel(vmClass));
 			}
 		}
 		const bool hooked = pe::Watch(widgetClass, &OnWidgetEvent);

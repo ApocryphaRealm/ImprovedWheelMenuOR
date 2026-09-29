@@ -34,7 +34,22 @@ namespace reflect
 
 	// every live instance of a class (never the class default object)
 	std::vector<UE::UObject*> Instances(UE::UClass* a_class);
+
+	// For an object read THIS frame from a live owner only: it reads a_obj's own index, so a pointer kept from an
+	// earlier frame must never come here (a freed row's index is garbage - the crash of 2026-09-29 09:15, dropping an
+	// item with X: IsLive from HighlightedItem read freed memory). Kept pointers are Handles.
 	bool IsLive(UE::UObject* a_obj);
+
+	// A pointer kept across frames with the object-array slot it was found in. Get() asks the SLOT whether it still
+	// holds that object and never reads the object itself.
+	struct Handle
+	{
+		UE::UObject* ptr = nullptr;
+		std::int32_t index = -1;
+	};
+	Handle       Hold(UE::UObject* a_live);   // a_live must be live now (handed to us by the engine this frame)
+	UE::UObject* Get(const Handle& a_handle);   // nullptr once the slot holds anything else
+	UE::UObject* Get(UE::UObject* a_ptr, std::int32_t a_index);
 
 	// calls a UFunction by name through ProcessEvent (params laid out by the caller); false when it has none
 	bool Call(UE::UObject* a_obj, const wchar_t* a_function, void* a_params);

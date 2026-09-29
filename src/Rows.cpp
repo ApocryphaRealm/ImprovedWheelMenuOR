@@ -23,19 +23,20 @@ namespace rows
 			std::int32_t properties = -1;   // the row widget's Properties struct
 			std::int32_t name = -1, icon = -1, form = -1;
 			std::int32_t inContainer = -1, playerItem = -1;   // bIsInContainerMenu, bIsInventoryItem (inventory rows)
-			UE::UObject* highlighted = nullptr;
+			reflect::Handle highlighted;   // kept across frames: resolved through its slot before every use
 			UE::UFunction* fnSelection = nullptr;   // this row class's BP_OnItemSelectionChanged
-			std::unordered_set<UE::UObject*> seen;
+			std::unordered_map<UE::UObject*, std::int32_t> seen;   // row -> its object-array slot
 		};
 		Kind g_inventory, g_magic;
 
-		std::unordered_map<std::uint32_t, UE::UObject*> g_itemIcons, g_spellIcons;
+		std::unordered_map<std::uint32_t, reflect::Handle> g_itemIcons, g_spellIcons;   // resolved through the slot when asked
 		std::unordered_map<std::string, std::uint32_t> g_spellsByName;
 		bool g_dirty = true;   // a row changed since the caches were last filled
 
+		// a_row must be live NOW: resolved from its Handle (or its seen slot) this frame, never a pointer kept from before
 		void* PropsOf(Kind& a_kind, UE::UObject* a_row)
 		{
-			return a_row && a_kind.properties >= 0 && reflect::IsLive(a_row) ? reflect::At<void>(a_row, a_kind.properties) : nullptr;
+			return a_row && a_kind.properties >= 0 ? reflect::At<void>(a_row, a_kind.properties) : nullptr;
 		}
 
 		std::string NameOfRow(Kind& a_kind, UE::UObject* a_row)
@@ -91,25 +92,27 @@ namespace rows
 			}
 			g_dirty = false;
 			for (auto it = g_inventory.seen.begin(); it != g_inventory.seen.end();) {
-				if (!reflect::IsLive(*it)) {
+				auto* row = reflect::Get(it->first, it->second);
+				if (!row) {
 					it = g_inventory.seen.erase(it);
 					continue;
 				}
-				if (const auto id = FormOfInventoryRow(*it)) {
-					if (auto* icon = IconOfRow(g_inventory, *it)) {
-						g_itemIcons[id] = icon;
+				if (const auto id = FormOfInventoryRow(row)) {
+					if (auto* icon = IconOfRow(g_inventory, row); icon && reflect::IsLive(icon)) {
+						g_itemIcons[id] = reflect::Hold(icon);
 					}
 				}
 				++it;
 			}
 			for (auto it = g_magic.seen.begin(); it != g_magic.seen.end();) {
-				if (!reflect::IsLive(*it)) {
+				auto* row = reflect::Get(it->first, it->second);
+				if (!row) {
 					it = g_magic.seen.erase(it);
 					continue;
 				}
-				if (const auto id = SpellByName(KeyOfRow(g_magic, *it))) {
-					if (auto* icon = IconOfRow(g_magic, *it)) {
-						g_spellIcons[id] = icon;
+				if (const auto id = SpellByName(KeyOfRow(g_magic, row))) {
+					if (auto* icon = IconOfRow(g_magic, row); icon && reflect::IsLive(icon)) {
+						g_spellIcons[id] = reflect::Hold(icon);
 					}
 				}
 				++it;
@@ -118,13 +121,13 @@ namespace rows
 
 		void OnRow(Kind& a_kind, UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params)
 		{
-			a_kind.seen.insert(a_obj);
+			a_kind.seen.insert_or_assign(a_obj, a_obj->internalIndex);   // live: the engine is calling it now
 			g_dirty = true;
 			if (!a_kind.fnSelection && pe::FunctionName(a_fn) == "BP_OnItemSelectionChanged") {
 				a_kind.fnSelection = a_fn;
 			}
 			if (a_fn == a_kind.fnSelection && a_params && *static_cast<const bool*>(a_params)) {
-				a_kind.highlighted = a_obj;
+				a_kind.highlighted = reflect::Hold(a_obj);
 			}
 		}
 
@@ -184,14 +187,16 @@ namespace rows
 	std::uint32_t HighlightedItem()
 	{
 		Harvest();
-		const auto id = FormOfInventoryRow(g_inventory.highlighted);
-		logger::info("rows: highlighted inventory row: {} ({})", NameOfRow(g_inventory, g_inventory.highlighted), id ? std::format("0x{:08X}", id) : "no item");
+		auto*      row = reflect::Get(g_inventory.highlighted);   // gone after a drop or a close: no item
+		const auto id = FormOfInventoryRow(row);
+		logger::info("rows: highlighted inventory row: {} ({})", row ? NameOfRow(g_inventory, row) : std::string("(gone)"),
+			id ? std::format("0x{:08X}", id) : "no item");
 		return id;
 	}
 
 	std::uint32_t HighlightedPlayerItemInContainer()
 	{
-		UE::UObject* row = g_inventory.highlighted;
+		UE::UObject* row = reflect::Get(g_inventory.highlighted);
 		void* props = PropsOf(g_inventory, row);
 		const bool* inContainer = reflect::At<bool>(props, g_inventory.inContainer);
 		const bool* playerItem = reflect::At<bool>(props, g_inventory.playerItem);
@@ -204,8 +209,9 @@ namespace rows
 	std::uint32_t HighlightedSpell()
 	{
 		Harvest();
-		const std::string name = NameOfRow(g_magic, g_magic.highlighted);
-		const std::string key = KeyOfRow(g_magic, g_magic.highlighted);
+		auto*             row = reflect::Get(g_magic.highlighted);
+		const std::string name = NameOfRow(g_magic, row);
+		const std::string key = KeyOfRow(g_magic, row);
 		const auto id = SpellByName(key);
 		logger::info("rows: highlighted magic row: \"{}\" (key {}; {})", name, key.empty() ? "none" : key,
 			id ? std::format("spell 0x{:08X}", id) : "not one of the player's spells");
@@ -216,14 +222,14 @@ namespace rows
 	{
 		Harvest();
 		const auto it = g_itemIcons.find(a_formID);
-		return it == g_itemIcons.end() ? nullptr : it->second;
+		return it == g_itemIcons.end() ? nullptr : reflect::Get(it->second);
 	}
 
 	UE::UObject* SpellIcon(std::uint32_t a_formID)
 	{
 		Harvest();
 		const auto it = g_spellIcons.find(a_formID);
-		return it == g_spellIcons.end() ? nullptr : it->second;
+		return it == g_spellIcons.end() ? nullptr : reflect::Get(it->second);
 	}
 
 	std::uint32_t SpellByName(const std::string& a_name)

@@ -125,6 +125,26 @@ namespace reflect
 		return item && reinterpret_cast<UE::UObject*>(item->object) == a_o;
 	}
 
+	Handle Hold(UE::UObject* a_live)
+	{
+		return a_live ? Handle{ a_live, a_live->internalIndex } : Handle{};
+	}
+
+	UE::UObject* Get(UE::UObject* a_ptr, std::int32_t a_index)
+	{
+		auto* arr = UE::FUObjectArray::GetSingleton();
+		if (!a_ptr || !arr || a_index < 0 || a_index >= arr->GetObjectArrayNum()) {
+			return nullptr;
+		}
+		auto* item = arr->IndexToObject(a_index);
+		return item && reinterpret_cast<UE::UObject*>(item->object) == a_ptr ? a_ptr : nullptr;
+	}
+
+	UE::UObject* Get(const Handle& a_handle)
+	{
+		return Get(a_handle.ptr, a_handle.index);
+	}
+
 	std::vector<UE::UObject*> Instances(UE::UClass* a_class)
 	{
 		std::vector<UE::UObject*> out;
