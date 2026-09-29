@@ -40,7 +40,9 @@ namespace pad
 		bool              g_suppressDown = false;   // let the game see D-pad down UP until the physical button is released
 		Clock::time_point g_gameDownAt{};
 
-		int g_pulseDown = 0;   // reads left of a replayed D-pad down tap
+		int  g_pulseDown = 0;   // reads left of a replayed D-pad down tap
+		bool g_swallowB = false;   // B was used to back out of the panel / radial: the game never sees it, until let go
+		int  g_centreStick = 0;    // reads left with the right stick held centred (a cancelled radial must not point anywhere)
 		int g_pulseLS = 0;     // reads left of a synthetic left stick click (toggles the menu's assign panel)
 
 		void ResetMenuState()
@@ -100,6 +102,16 @@ namespace pad
 					ResetMenuState();
 				}
 				if (quickkeys::PanelOpen()) {
+					// B backs out of the panel (the game's own toggle, as the hold on D-pad down); the next B leaves the menu
+					if (pressed & XINPUT_GAMEPAD_B) {
+						g_swallowB = true;
+						g_pulseLS = kPulseReads;
+						logger::info("pad: B with the assign panel showing - panel closed");
+					}
+					// the game's A (Assign Item) is watched: pressed again on the same item it removes it (Wheels.h)
+					if (pressed & XINPUT_GAMEPAD_A) {
+						wheels::AssignPressed(menu, quickkeys::PointedSlot());
+					}
 					out &= ~(XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_RIGHT);
 					const auto wheel = menu == menus::Menu::kMagic ? wheels::Wheel::kMagic : wheels::Wheel::kEquipment;
 					if (pressed & XINPUT_GAMEPAD_DPAD_LEFT) { wheels::CycleEntry(wheel, quickkeys::PointedSlot(), -1); }
@@ -127,7 +139,16 @@ namespace pad
 				if (((raw & XINPUT_GAMEPAD_DPAD_DOWN) && !g_suppressDown) || g_latched) {
 					out |= XINPUT_GAMEPAD_DPAD_DOWN;
 				}
-				if (quickkeys::RadialOpen()) {
+				if (quickkeys::RadialOpen() && (pressed & XINPUT_GAMEPAD_B)) {
+					// B backs out: nothing is used, the wheel closes
+					quickkeys::CancelChoice();
+					g_latched = false;
+					if (raw & XINPUT_GAMEPAD_DPAD_DOWN) { g_suppressDown = true; }
+					g_swallowB = true;
+					g_centreStick = kPulseReads * 2;
+					out &= ~XINPUT_GAMEPAD_DPAD_DOWN;
+					logger::info("pad: B on the wheel - closed without using a slot");
+				} else if (quickkeys::RadialOpen()) {
 					const int slot = quickkeys::PointedSlot();
 					out &= ~(XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER);
 					if (pressed & XINPUT_GAMEPAD_DPAD_LEFT) { wheels::SwitchWheel(-1); }
@@ -146,6 +167,20 @@ namespace pad
 				}
 			}
 
+			if (g_swallowB) {
+				if (raw & XINPUT_GAMEPAD_B) {
+					out &= ~XINPUT_GAMEPAD_B;
+				} else {
+					g_swallowB = false;
+				}
+			}
+			if (g_centreStick > 0) {
+				a_pad.sThumbRX = 0;
+				a_pad.sThumbRY = 0;
+				--g_centreStick;
+			}
+			wheels::Tick((raw & XINPUT_GAMEPAD_A) != 0);
+
 			// synthetic presses
 			if (g_pulseDown > 0) { out |= XINPUT_GAMEPAD_DPAD_DOWN; --g_pulseDown; }
 			if (g_pulseLS > 0) { out |= XINPUT_GAMEPAD_LEFT_THUMB; --g_pulseLS; }
@@ -162,13 +197,14 @@ namespace pad
 			g_reads.fetch_add(1, std::memory_order_relaxed);
 			const WORD rawButtons = a_state->Gamepad.wButtons;
 			const BYTE rawLT = a_state->Gamepad.bLeftTrigger, rawRT = a_state->Gamepad.bRightTrigger;
+			const SHORT rawRX = a_state->Gamepad.sThumbRX, rawRY = a_state->Gamepad.sThumbRY;
 			Rewrite(a_state->Gamepad);
 			const auto& g = a_state->Gamepad;
-			if (g.wButtons != rawButtons || g.bLeftTrigger != rawLT || g.bRightTrigger != rawRT) {
+			if (g.wButtons != rawButtons || g.bLeftTrigger != rawLT || g.bRightTrigger != rawRT || g.sThumbRX != rawRX || g.sThumbRY != rawRY) {
 				g_rewritten.fetch_add(1, std::memory_order_relaxed);
 			}
 			// the game only processes a state whose packet number moved: move it whenever what we hand over changes
-			if (g.wButtons != g_prevOutButtons || g.bLeftTrigger != g_prevOutLT || g.bRightTrigger != g_prevOutRT) {
+			if (g.wButtons != g_prevOutButtons || g.bLeftTrigger != g_prevOutLT || g.bRightTrigger != g_prevOutRT || g.sThumbRX != rawRX || g.sThumbRY != rawRY) {
 				++g_packetOffset;
 				g_prevOutButtons = g.wButtons;
 				g_prevOutLT = g.bLeftTrigger;

@@ -90,7 +90,7 @@ namespace quickkeys
 			return found;
 		}
 
-		int ReadKeyIndex()
+		std::int32_t* KeyIndexField()
 		{
 			auto* vm = g_viewModel.load(std::memory_order_acquire);
 			auto* cls = g_viewModelClass.load(std::memory_order_acquire);
@@ -98,10 +98,16 @@ namespace quickkeys
 				vm = FindViewModel(cls);   // recreated after a load? find it again
 				g_viewModel.store(vm, std::memory_order_release);
 				if (!vm) {
-					return -1;
+					return nullptr;
 				}
 			}
-			return *reinterpret_cast<const std::int32_t*>(reinterpret_cast<const std::uint8_t*>(vm) + kKeyIndexOffset);
+			return reinterpret_cast<std::int32_t*>(reinterpret_cast<std::uint8_t*>(vm) + kKeyIndexOffset);
+		}
+
+		int ReadKeyIndex()
+		{
+			const auto* f = KeyIndexField();
+			return f ? *f : -1;
 		}
 
 		// The instance that opened as a menu's panel (nullptr when none) - its close is the panel's, not the radial's.
@@ -226,6 +232,16 @@ namespace quickkeys
 		} else {
 			g_status.problem = "the widget's vtable could not be swapped";
 		}
+	}
+
+	void CancelChoice()
+	{
+		if (auto* f = KeyIndexField()) {
+			logger::info("quick keys: choice cancelled (the view model pointed at slot {})", *f + 1);
+			*f = -1;
+		}
+		std::scoped_lock l(g_statusLock);
+		g_status.pointedSlot = -1;
 	}
 
 	bool RadialOpen()

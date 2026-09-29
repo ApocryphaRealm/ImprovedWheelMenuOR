@@ -36,6 +36,7 @@ namespace quickkeys
 	bool RadialOpen();   // the HUD radial is showing
 	bool PanelOpen();    // a menu's assign panel is showing
 	int  PointedSlot();  // the slot under the pointer on whichever is showing, -1 for none
+	void CancelChoice(); // B on the HUD radial: the view model points at no slot, so the close uses nothing
 
 	struct Status
 	{
