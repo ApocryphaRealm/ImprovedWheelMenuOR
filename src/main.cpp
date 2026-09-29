@@ -1,8 +1,11 @@
 // Improved Wheel Menu (Oblivion Remastered) - entry point.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "Menus.h"
+#include "Pad.h"
 #include "QuickKeys.h"
 #include "Settings.h"
+#include "Wheels.h"
 
 namespace
 {
@@ -18,14 +21,17 @@ namespace
 	void WriteSelfCheck()
 	{
 		const auto s = quickkeys::GetStatus();
+		const auto p = pad::GetStatus();
 		const auto path = settings::PluginFolder() / L"ImprovedWheelMenu.selfcheck.txt";
 		std::string text = std::format(
 			"Improved Wheel Menu {} self-check\n"
-			"widget class found: {}\nview model found: {}\nProcessEvent hook: {}\n"
-			"radial open now: {}\npointed slot: {} ({})\nlast chosen slot: {} ({})\nopens this session: {}\nproblem: {}\n",
+			"widget class found: {}\nview model found: {}\nquick keys watch: {}\n"
+			"radial open now: {}\nmenu panel open now: {}\npointed slot: {} ({})\nlast chosen slot: {} ({})\nopens this session: {}\n"
+			"controller rules: {} (reads {}, rewritten {}, chained after {})\nmenu now: {}\nactive wheel: {}\nproblem: {}\n",
 			IWM_VERSION, s.widgetClassFound ? "yes" : "no", s.viewModelFound ? "yes" : "no", s.hookInstalled ? "installed" : "NOT installed",
-			s.open ? "yes" : "no", s.pointedSlot, SlotWord(s.pointedSlot), s.lastChosenSlot, SlotWord(s.lastChosenSlot), s.opens,
-			s.problem.empty() ? "none" : s.problem);
+			s.open ? "yes" : "no", s.panelOpen ? "yes" : "no", s.pointedSlot, SlotWord(s.pointedSlot), s.lastChosenSlot, SlotWord(s.lastChosenSlot), s.opens,
+			p.installed ? "installed" : "NOT installed", p.reads, p.rewritten, p.previousTarget.empty() ? "-" : p.previousTarget,
+			menus::Name(menus::Active()), wheels::Name(wheels::Active()), s.problem.empty() ? "none" : s.problem);
 		FILE* f = nullptr;
 		if (_wfopen_s(&f, path.c_str(), L"wb") == 0 && f) {
 			std::fwrite(text.data(), 1, text.size(), f);
@@ -37,13 +43,19 @@ namespace
 	{
 		switch (a_event) {
 		case quickkeys::Event::kOpened:
-			logger::info("radial opened");
+			logger::info("radial opened (the {} wheel)", wheels::Name(wheels::Active()));
 			break;
 		case quickkeys::Event::kPointed:
-			logger::debug("radial points at slot {} ({})", a_slot, SlotWord(a_slot));
+			logger::debug("points at slot {} ({})", a_slot, SlotWord(a_slot));
 			break;
 		case quickkeys::Event::kClosed:
 			logger::info("radial closed; the game uses slot {} ({})", a_slot, SlotWord(a_slot));
+			break;
+		case quickkeys::Event::kPanelOpened:
+			logger::info("assign panel opened in the {}", menus::Name(menus::Active()));
+			break;
+		case quickkeys::Event::kPanelClosed:
+			logger::info("assign panel closed");
 			break;
 		}
 		WriteSelfCheck();
@@ -55,17 +67,23 @@ namespace
 			return;
 		}
 		quickkeys::Install(&OnQuickKeys);
-		// the self-check is written once now (nothing installed yet) and again as the hook lands
 		WriteSelfCheck();
+		// One lazy thread: the widget and menu classes appear as the game builds them (the quick keys widget at the
+		// main menu, each menu the first time it opens). The controller rules go in once the quick keys watch is in.
 		std::thread([] {
-			for (int i = 0; i < 600; ++i) {   // ten minutes at most: the hook lands when a save is loaded
-				std::this_thread::sleep_for(1s);
-				if (quickkeys::GetStatus().hookInstalled) {
+			bool reported = false;
+			for (;;) {
+				std::this_thread::sleep_for(200ms);
+				quickkeys::Tick();
+				menus::Tick();
+				if (quickkeys::GetStatus().hookInstalled && !pad::GetStatus().installed) {
+					pad::Install();
+				}
+				if (!reported && quickkeys::GetStatus().hookInstalled && pad::GetStatus().installed) {
+					reported = true;
 					WriteSelfCheck();
-					return;
 				}
 			}
-			WriteSelfCheck();
 		}).detach();
 	}
 }

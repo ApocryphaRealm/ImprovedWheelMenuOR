@@ -1,5 +1,8 @@
 #include "QuickKeys.h"
 
+#include "Menus.h"
+#include "PEHook.h"
+
 
 namespace quickkeys
 {
@@ -8,11 +11,8 @@ namespace quickkeys
 		// The Blueprint class of the radial and its view model's native class, as the running game names them.
 		constexpr const wchar_t* kWidgetClassPath = L"/Game/UI/Modern/GameMenuLayer/WBP_ModernMenu_QuickKeys.WBP_ModernMenu_QuickKeys_C";
 		constexpr const wchar_t* kViewModelClassPath = L"/Script/Altar.VQuickKeysMenuViewModel";
-		constexpr std::size_t    kProcessEventSlot = 0x4D;
 		constexpr std::ptrdiff_t kKeyIndexOffset = 0xD0;   // VQuickKeysMenuViewModel::KeyIndex (IntProperty), read by reflection 2026-09-26
 
-		using ProcessEvent_t = void (*)(UE::UObject*, UE::UFunction*, void*);
-		ProcessEvent_t g_original = nullptr;
 
 		std::atomic<UE::UClass*>  g_widgetClass{ nullptr };
 		std::atomic<UE::UObject*> g_viewModel{ nullptr };
@@ -104,6 +104,9 @@ namespace quickkeys
 			return *reinterpret_cast<const std::int32_t*>(reinterpret_cast<const std::uint8_t*>(vm) + kKeyIndexOffset);
 		}
 
+		// The instance that opened as a menu's panel (nullptr when none) - its close is the panel's, not the radial's.
+		std::atomic<UE::UObject*> g_panelObject{ nullptr };
+
 		void Emit(Event a_event, int a_slot)
 		{
 			{
@@ -114,18 +117,28 @@ namespace quickkeys
 					g_status.pointedSlot = -1;
 					++g_status.opens;
 					break;
+				case Event::kPanelOpened:
+					g_status.panelOpen = true;
+					g_status.pointedSlot = -1;
+					break;
 				case Event::kPointed:
 					g_status.pointedSlot = a_slot;
 					break;
 				case Event::kClosed:
-					// the widget collapses itself once as the menu layer is built (main menu, no open before it):
-					// that is not the player closing the radial, and it chose nothing
+					// the widget collapses itself once as the menu layer is built (no open before it): not the
+					// player closing the radial, and it chose nothing
 					if (!g_status.open) {
 						logger::debug("quick keys: collapsed while not open (widget set-up) - ignored");
 						return;
 					}
 					g_status.open = false;
 					g_status.lastChosenSlot = a_slot;
+					break;
+				case Event::kPanelClosed:
+					if (!g_status.panelOpen) {
+						return;
+					}
+					g_status.panelOpen = false;
 					break;
 				}
 			}
@@ -134,93 +147,52 @@ namespace quickkeys
 			}
 		}
 
-		void HookedProcessEvent(UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params)
+		void OnVisibility(UE::UObject* a_obj, std::uint8_t a_vis)
 		{
-			if (a_obj && a_fn && a_obj->GetClass() == g_widgetClass.load(std::memory_order_relaxed)) {
-				if (a_fn == g_fnVisibility) {
-					if (a_params) {
-						const auto vis = *static_cast<const std::uint8_t*>(a_params);   // ESlateVisibility
-						if (vis == 4) {                                                   // SelfHitTestInvisible: shown
-							Emit(Event::kOpened, -1);
-						} else if (vis == 1) {                                            // Collapsed: hidden
-							Emit(Event::kClosed, ReadKeyIndex());
-						}
-					}
-				} else if (a_fn == g_fnKeyIndex) {
-					if (a_params) {
-						Emit(Event::kPointed, *static_cast<const std::int32_t*>(a_params));
-					}
-				} else if (!g_fnVisibility || !g_fnKeyIndex) {
-					// still learning the two UFunction pointers: one name compare per unknown function
-					const std::string n = NameOf(a_fn->GetFName());
-					if (!g_fnVisibility && n == "OnVisibilityChangedEvent") {
-						g_fnVisibility = a_fn;
-						if (a_params) {
-							const auto vis = *static_cast<const std::uint8_t*>(a_params);
-							if (vis == 4) { Emit(Event::kOpened, -1); } else if (vis == 1) { Emit(Event::kClosed, ReadKeyIndex()); }
-						}
-					} else if (!g_fnKeyIndex && n == "Update Key Index") {
-						g_fnKeyIndex = a_fn;
-						if (a_params) { Emit(Event::kPointed, *static_cast<const std::int32_t*>(a_params)); }
-					}
+			if (a_vis == 4) {   // SelfHitTestInvisible: shown
+				if (menus::Active() != menus::Menu::kNone) {
+					g_panelObject.store(a_obj);
+					Emit(Event::kPanelOpened, -1);
+				} else {
+					Emit(Event::kOpened, -1);
 				}
-			}
-			if (g_original) {
-				g_original(a_obj, a_fn, a_params);
+			} else if (a_vis == 1) {   // Collapsed: hidden
+				if (g_panelObject.load() == a_obj) {
+					g_panelObject.store(nullptr);
+					Emit(Event::kPanelClosed, -1);
+				} else {
+					Emit(Event::kClosed, ReadKeyIndex());
+				}
 			}
 		}
 
-		// The widget's ProcessEvent is reached through its C++ vtable (slot 0x4D). The entry in THAT vtable is swapped
-		// for ours - no code is patched. UE4SS hooks UObject::ProcessEvent's code (the shared body), so the pointer
-		// read from the slot below is whatever UE4SS left there, and every call still reaches it: the two coexist in
-		// either load order. A MinHook on the body (this module's first build) broke UE4SS's own hook when it landed
-		// first, and crashed in this function with Ultimate Combat Redux's watcher (logic library 7555, 2026-09-28).
-		// The vtable is shared by the native class's other instances, so the class filter above stays.
-		bool InstallHook(UE::UClass* a_widgetClass)
+		// pe::Watch handler: runs on the game thread before the widget's function
+		void OnWidgetEvent(UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params)
 		{
-			auto* cdo = a_widgetClass ? a_widgetClass->GetDefaultObject(false) : nullptr;
-			if (!cdo) {
-				SetProblem("widget class has no default object yet");
-				return false;
+			if (a_fn == g_fnVisibility) {
+				if (a_params) { OnVisibility(a_obj, *static_cast<const std::uint8_t*>(a_params)); }
+			} else if (a_fn == g_fnKeyIndex) {
+				if (a_params) { Emit(Event::kPointed, *static_cast<const std::int32_t*>(a_params)); }
+			} else if (!g_fnVisibility || !g_fnKeyIndex) {
+				// still learning the two UFunction pointers: one name compare per unknown function
+				const std::string n = pe::FunctionName(a_fn);
+				if (!g_fnVisibility && n == "OnVisibilityChangedEvent") {
+					g_fnVisibility = a_fn;
+					if (a_params) { OnVisibility(a_obj, *static_cast<const std::uint8_t*>(a_params)); }
+				} else if (!g_fnKeyIndex && n == "Update Key Index") {
+					g_fnKeyIndex = a_fn;
+					if (a_params) { Emit(Event::kPointed, *static_cast<const std::int32_t*>(a_params)); }
+				}
 			}
-			void** vtable = *reinterpret_cast<void***>(cdo);
-			if (!vtable || !vtable[kProcessEventSlot]) {
-				SetProblem("widget vtable unreadable");
-				return false;
-			}
-			void** slot = &vtable[kProcessEventSlot];
-			if (*slot == reinterpret_cast<void*>(&HookedProcessEvent)) {
-				return true;   // already ours
-			}
-			DWORD oldProtect = 0;
-			if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &oldProtect)) {
-				SetProblem(std::format("VirtualProtect on the vtable slot failed ({})", GetLastError()));
-				return false;
-			}
-			g_original = reinterpret_cast<ProcessEvent_t>(*slot);
-			*slot = reinterpret_cast<void*>(&HookedProcessEvent);
-			DWORD ignored = 0;
-			VirtualProtect(slot, sizeof(void*), oldProtect, &ignored);
-			logger::info("quick keys: widget vtable slot 0x{:X} at {:p} now ours (previous target {:p}, UE4SS {})",
-				kProcessEventSlot, static_cast<void*>(slot), reinterpret_cast<void*>(g_original),
-				GetModuleHandleW(L"UE4SS.dll") ? "loaded" : "not loaded");
-			return true;
 		}
 	}
 
 	void Install(Listener a_listener)
 	{
 		g_listener = a_listener;
-		// Nothing of ours runs per frame (no menu, no drawing), so a thread looks for the widget's class once a
-		// second until it exists and installs the hook then. It ends itself when the hook is in.
-		std::thread([] {
-			while (!GetStatus().hookInstalled) {
-				std::this_thread::sleep_for(1s);
-				Tick();
-			}
-		}).detach();
 	}
 
+	// From the plugin's lazy thread until the watch is in (the class exists at the main menu).
 	void Tick()
 	{
 		if (GetStatus().hookInstalled) {
@@ -231,7 +203,7 @@ namespace quickkeys
 		if (!widgetClass) {
 			widgetClass = UE::StaticFindObject<UE::UClass>(nullptr, nullptr, kWidgetClassPath);
 			if (!widgetClass) {
-				return;   // not loaded yet - main menu
+				return;
 			}
 			g_widgetClass.store(widgetClass, std::memory_order_release);
 			logger::info("quick keys: widget class found ({})", Utf8(widgetClass->GetFullName()));
@@ -244,14 +216,34 @@ namespace quickkeys
 				g_viewModel.store(FindViewModel(vmClass), std::memory_order_release);
 			}
 		}
-		const bool hooked = InstallHook(widgetClass);
+		const bool hooked = pe::Watch(widgetClass, &OnWidgetEvent);
 		std::scoped_lock l(g_statusLock);
 		g_status.widgetClassFound = true;
 		g_status.viewModelFound = g_viewModel.load(std::memory_order_relaxed) != nullptr;
 		g_status.hookInstalled = hooked;
 		if (hooked) {
 			g_status.problem.clear();
+		} else {
+			g_status.problem = "the widget's vtable could not be swapped";
 		}
+	}
+
+	bool RadialOpen()
+	{
+		std::scoped_lock l(g_statusLock);
+		return g_status.open;
+	}
+
+	bool PanelOpen()
+	{
+		std::scoped_lock l(g_statusLock);
+		return g_status.panelOpen;
+	}
+
+	int PointedSlot()
+	{
+		std::scoped_lock l(g_statusLock);
+		return g_status.pointedSlot;
 	}
 
 	Status GetStatus()

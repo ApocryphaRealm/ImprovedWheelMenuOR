@@ -1,0 +1,22 @@
+#pragma once
+
+// ============================================================================================================
+// Which of the two menus that own a wheel is open: the inventory (the Equipment wheel) or the magic menu (the
+// Magic wheel) - the owner, 2026-09-29: "the wheel that pops up in the magic menu is the magic wheel and the
+// inventory wheel in the inventory".
+//
+// Both are CommonUI activatable widgets (read in game 2026-09-29): WBP_OriginalMenu_Inventory_C (native
+// VInventoryMenu) and WBP_ModernMenu_MagicMenu_C (native VLegacyMagicMenu); BP_OnActivated / BP_OnDeactivated pass
+// through ProcessEvent, watched with pe::Watch. Their classes load the first time each menu opens, so the watch
+// lands then; the menu being opened at that moment is taken as active. The Gamebryo menu mode (1 = gameplay)
+// clears the state if a deactivation was missed.
+// ============================================================================================================
+
+namespace menus
+{
+	enum class Menu { kNone, kInventory, kMagic };
+
+	void Tick();       // from the plugin's lazy thread: finds the classes once they are loaded and watches them
+	Menu Active();     // game thread or any thread
+	const char* Name(Menu a_menu);
+}
