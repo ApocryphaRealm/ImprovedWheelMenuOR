@@ -345,6 +345,22 @@ namespace wheels
 				slot.active >= 0 ? NameOf(a_wheel, slot.entries[slot.active]) : "none");
 		}
 
+		// Taking an item off the wheel the normal way unfavourites it (the owner, 2026-09-29: "I just removed the item from
+		// the wheel the normal way. Which should be considered going forward."): every OTHER slot of that wheel lets it go
+		// too, so a copy hidden among a slot's inactive entries cannot keep it a favourite (the Revealer of Iniquity stayed
+		// undroppable as the first of Equipment slot 3's three entries after it was taken off slots 7 and 1).
+		void RemoveFromOtherSlots(int a_wheel, int a_keepSlot, std::uint32_t a_id)
+		{
+			for (int s = 0; s < inventory::kSlots; ++s) {
+				if (s == a_keepSlot) {
+					continue;
+				}
+				for (int idx = IndexOf(g_wheels[a_wheel][s], a_id); idx >= 0; idx = IndexOf(g_wheels[a_wheel][s], a_id)) {
+					RemoveAt(a_wheel, s, idx, std::format("taken off the wheel from slot {}", a_keepSlot + 1));
+				}
+			}
+		}
+
 		// Adds to a slot as its active entry (the Equipment wheel moves the game's key onto it).
 		bool AddTo(int a_wheel, int a_slot, std::uint32_t a_id, const char* a_why)
 		{
@@ -406,6 +422,7 @@ namespace wheels
 			if (a_arrived == previous) {
 				// pressed again on the item the slot shows: out it goes, the next entry takes its place
 				RemoveAt(kEquip, a_slot, idx >= 0 ? idx : slot.active, "assign pressed again on the same item");
+				RemoveFromOtherSlots(kEquip, a_slot, a_arrived);
 			} else if (idx >= 0) {
 				// pressed on an entry the slot holds but is not showing: out it goes, the shown one stays
 				slot.entries.erase(slot.entries.begin() + idx);
@@ -416,6 +433,7 @@ namespace wheels
 				}
 				logger::info("wheels: assign on {} (already in slot {}) - REMOVED; {} stays active", inventory::NameOf(a_arrived), a_slot + 1,
 					previous ? inventory::NameOf(previous) : "nothing");
+				RemoveFromOtherSlots(kEquip, a_slot, a_arrived);
 			} else if (static_cast<int>(slot.entries.size()) >= Cap()) {
 				inventory::ClearKey(a_arrived);
 				if (previous) {
@@ -450,6 +468,7 @@ namespace wheels
 				const int idx = IndexOf(g_wheels[a_wheel][s], a_id);
 				if (idx >= 0) {
 					RemoveAt(a_wheel, s, idx, "Favourite toggled off");
+					RemoveFromOtherSlots(a_wheel, s, a_id);   // off the whole wheel, not only the first slot holding it
 					Save();
 					PatchChanged(before);
 					Refresh();
@@ -530,6 +549,7 @@ namespace wheels
 			Slot& slot = g_wheels[kMagic][a_slot];
 			if (const int idx = IndexOf(slot, spell); idx >= 0) {
 				RemoveAt(kMagic, a_slot, idx, "assign pressed on a spell already in the slot");
+				RemoveFromOtherSlots(kMagic, a_slot, spell);
 			} else {
 				AddTo(kMagic, a_slot, spell, "assign");
 			}
