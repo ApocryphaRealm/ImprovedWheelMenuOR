@@ -21,6 +21,7 @@ namespace pad
 		std::atomic<bool> g_installed{ false };
 		std::atomic<std::uint64_t> g_reads{ 0 }, g_rewritten{ 0 };
 		std::string g_previousTarget;
+		std::atomic<FrameCallback> g_frameCallback{ nullptr };
 
 		// ---- state, touched only inside the read (the game thread) ----
 		WORD   g_prevRaw = 0;
@@ -190,6 +191,11 @@ namespace pad
 
 		DWORD WINAPI Chained(DWORD a_user, XINPUT_STATE* a_state)
 		{
+			if (a_user == 0) {
+				if (auto cb = g_frameCallback.load(std::memory_order_acquire)) {
+					cb();
+				}
+			}
 			const DWORD rc = g_previous ? g_previous(a_user, a_state) : ERROR_DEVICE_NOT_CONNECTED;
 			if (rc != ERROR_SUCCESS || !a_state || a_user != 0) {
 				return rc;
@@ -276,6 +282,11 @@ namespace pad
 		}
 		logger::error("pad: the game imports no XInputGetState - no controller rules");
 		return false;
+	}
+
+	void SetFrameCallback(FrameCallback a_callback)
+	{
+		g_frameCallback.store(a_callback, std::memory_order_release);
 	}
 
 	Status GetStatus()

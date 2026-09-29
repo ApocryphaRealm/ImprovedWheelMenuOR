@@ -25,7 +25,13 @@
 
 namespace pad
 {
-	bool Install();   // chains the import slot; call once from the lazy thread (idempotent)
+	bool Install();   // chains the import slot; call once at OBSE's post-load (idempotent)
+
+	// Called on EVERY read, on the game thread, before anything else (connected pad or not). The plugin's
+	// look-ups of engine objects run from here: done from a thread of our own while the engine was building
+	// objects, a start-up crashed with UObjectArray's "another object exists at that index" (2026-09-29).
+	using FrameCallback = void (*)();
+	void SetFrameCallback(FrameCallback a_callback);
 
 	struct Status
 	{

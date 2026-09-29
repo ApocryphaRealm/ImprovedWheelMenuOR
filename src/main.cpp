@@ -67,24 +67,26 @@ namespace
 			return;
 		}
 		quickkeys::Install(&OnQuickKeys);
-		WriteSelfCheck();
-		// One lazy thread: the widget and menu classes appear as the game builds them (the quick keys widget at the
-		// main menu, each menu the first time it opens). The controller rules go in once the quick keys watch is in.
-		std::thread([] {
-			bool reported = false;
-			for (;;) {
-				std::this_thread::sleep_for(200ms);
-				quickkeys::Tick();
-				menus::Tick();
-				if (quickkeys::GetStatus().hookInstalled && !pad::GetStatus().installed) {
-					pad::Install();
-				}
-				if (!reported && quickkeys::GetStatus().hookInstalled && pad::GetStatus().installed) {
-					reported = true;
-					WriteSelfCheck();
-				}
+		// The widget and menu classes appear as the game builds them (the quick keys widget at the main menu, each
+		// menu the first time it opens). They are looked for on the GAME thread, from the controller read, about
+		// every 200 ms - never from a thread of our own (a start-up crashed in UObjectArray, 2026-09-29).
+		pad::SetFrameCallback([] {
+			static auto next = std::chrono::steady_clock::now();
+			static bool reported = false;
+			const auto now = std::chrono::steady_clock::now();
+			if (now < next) {
+				return;
 			}
-		}).detach();
+			next = now + 200ms;
+			quickkeys::Tick();
+			menus::Tick();
+			if (!reported && quickkeys::GetStatus().hookInstalled) {
+				reported = true;
+				WriteSelfCheck();
+			}
+		});
+		pad::Install();
+		WriteSelfCheck();
 	}
 }
 
