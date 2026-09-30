@@ -205,6 +205,34 @@ namespace pad
 			return s_fn();
 		}
 
+		// Tween Menu's own menu is open (TweenMenu_IsOpen, Tween Menu's export for this): the wheels - the ammo wheel above
+		// all - stand down as for the framework's window (the owner, 2026-09-30: "The ammo wheel shouldn't be able to be
+		// called during the tween menu"). Tween Menu draws its menu in gameplay, so no game menu reports it. Looked up by
+		// name; a Tween Menu without the export (or none) leaves the rules as they were.
+		bool TweenMenuOpen()
+		{
+			using Fn = bool (*)();
+			static Fn        s_fn = nullptr;
+			static ULONGLONG s_nextLook = 0;
+			if (!s_fn) {
+				const ULONGLONG now = GetTickCount64();
+				if (now < s_nextLook) {
+					return false;
+				}
+				s_nextLook = now + 2000;
+				if (HMODULE m = ::GetModuleHandleW(L"TweenMenu.dll")) {
+					s_fn = reinterpret_cast<Fn>(::GetProcAddress(m, "TweenMenu_IsOpen"));
+					if (s_fn) {
+						logger::info("pad: Tween Menu reports its menu - the wheels stand down while it is open");
+					}
+				}
+				if (!s_fn) {
+					return false;
+				}
+			}
+			return s_fn();
+		}
+
 		void ResetMenuState()
 		{
 			g_menuDownHeld = false;
@@ -223,8 +251,8 @@ namespace pad
 			g_prevRT = a_pad.bRightTrigger;
 
 			const auto now = Clock::now();
-			if (AmfMenuOpen()) {
-				// the framework's window has the pad: no wheel rule runs, the read goes on untouched (its gate hides it
+			if (AmfMenuOpen() || TweenMenuOpen()) {
+				// the framework's window (or Tween Menu's menu) has the pad: no wheel rule runs, the read goes on untouched (its gate hides it
 				// from the game); an open ammo wheel closes, a latched wheel lets go
 				WORD untouched = raw;
 				ammo::Rewrite(a_pad, raw, 0, untouched, false, false);
