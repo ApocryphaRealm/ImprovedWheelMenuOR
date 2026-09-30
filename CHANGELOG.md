@@ -6,6 +6,10 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Changed: A chooses and closes on the Magic wheel, as on the game's own** (the owner: "I tried selecting clairvoyance
+  with pressing A like the vanilla game does and it didn't close the wheel ... it only selected it when I pressed the right
+  bumper it should do both"). A on the radial's Magic wheel sets the pointed slot's spell and lets the wheel close, like
+  RB; the game never sees that A. On the inventory wheel A stays the game's own.
 - **Fixed: the inventory wheel showed none of its equipment** (the owner: "the inventory wheel is not showing the
   equipment on the wheel"). The primary's read at 04:37: the game's picture list (the view model's Icons) was EMPTY while
   the keys held items, so the game set every slot's opacity to 0 on both wheels' material instances; the old redraw

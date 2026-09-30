@@ -415,6 +415,23 @@ namespace pad
 					if (ltPressed) { wheels::CycleEntry(wheels::Active(), slot, -1); }
 					if (rtPressed) { wheels::CycleEntry(wheels::Active(), slot, +1); }
 					if (pressed & XINPUT_GAMEPAD_LEFT_SHOULDER) { wheels::RemoveEntry(wheels::Active(), slot); }
+					// A chooses and closes, as on the game's own wheel (the owner, 2026-09-30: "I tried selecting clairvoyance
+					// with pressing A like the vanilla game does and it didn't close the wheel and select the magic it only
+					// selected it when I pressed the right bumper it should do both"). On the Magic wheel it is ours - the spell
+					// is set and the game never sees A, so it cannot use its own key there; on the inventory wheel A stays the
+					// game's, and a key holding a spell still uses nothing.
+					if (pressed & XINPUT_GAMEPAD_A) {
+						if (wheels::Active() == wheels::Wheel::kMagic) {
+							CloseOnMagic(slot);
+							g_swallowA = true;
+							g_latched = false;
+							if (raw & XINPUT_GAMEPAD_DPAD_DOWN) { g_suppressDown = true; }
+							out &= ~(XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_A);   // let go now: the wheel closes
+							logger::info("pad: A on the Magic wheel - slot {} chosen, the wheel closes", slot + 1);
+						} else {
+							CloseOnEquipment(slot);
+						}
+					}
 					if (pressed & XINPUT_GAMEPAD_RIGHT_SHOULDER) {
 						if (wheels::Active() == wheels::Wheel::kMagic) {
 							CloseOnMagic(slot);
