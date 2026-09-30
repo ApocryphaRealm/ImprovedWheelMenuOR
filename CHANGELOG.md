@@ -5,6 +5,13 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### Round 3 (in progress, 2026-09-30)
+- **Changed: the wheels stand down while the Apocrypha Menu Framework's window is open** (the owner: treat it like the
+  game's own wheel, apart from the bow condition). IWM reads the pad on the game's import before the framework's gate
+  hides it from the game, so D-pad down and D-pad right still opened the wheels with the framework's window up. IWM now
+  looks up the framework's AMF_IsMenuOpen export (AMF OR 1.0.5+). While the window is open, no wheel rule runs, an open
+  ammo wheel closes and a latched wheel lets go. A framework without the export leaves the rules as they were.
+
 ### Round 2 (the owner's report, 2026-09-30)
 - **Fixed: the ammo wheel never appeared.** The owner: "I don't see the ammo wheel while pressing D-pad right". The log
   showed every press arriving with a bow held, followed by "the wheel cannot be built yet". The player-controller

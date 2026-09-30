@@ -165,6 +165,34 @@ namespace pad
 			wheels::UseMagic(a_slot);
 		}
 
+		// The Apocrypha Menu Framework's window is open (AMF_IsMenuOpen, AMF OR 1.0.5+). This read comes before the
+		// framework's own pad gate hides the buttons from the game, so without this the D-pad still opened the wheels
+		// with the framework's window up (the owner, 2026-09-30: treat it like the game's own wheel, which never opens
+		// there). Looked up by name; a framework without the export (or none) leaves the rules as they were.
+		bool AmfMenuOpen()
+		{
+			using Fn = bool (*)();
+			static Fn        s_fn = nullptr;
+			static ULONGLONG s_nextLook = 0;
+			if (!s_fn) {
+				const ULONGLONG now = GetTickCount64();
+				if (now < s_nextLook) {
+					return false;
+				}
+				s_nextLook = now + 2000;
+				if (HMODULE m = ::GetModuleHandleW(L"ApocryphaMenuFramework.dll")) {
+					s_fn = reinterpret_cast<Fn>(::GetProcAddress(m, "AMF_IsMenuOpen"));
+					if (s_fn) {
+						logger::info("pad: the menu framework reports its window - the wheels stand down while it is open");
+					}
+				}
+				if (!s_fn) {
+					return false;
+				}
+			}
+			return s_fn();
+		}
+
 		void ResetMenuState()
 		{
 			g_menuDownHeld = false;
@@ -183,6 +211,16 @@ namespace pad
 			g_prevRT = a_pad.bRightTrigger;
 
 			const auto now = Clock::now();
+			if (AmfMenuOpen()) {
+				// the framework's window has the pad: no wheel rule runs, the read goes on untouched (its gate hides it
+				// from the game); an open ammo wheel closes, a latched wheel lets go
+				WORD untouched = raw;
+				ammo::Rewrite(a_pad, raw, 0, untouched, false, false);
+				a_pad.wButtons = raw;
+				g_latched = false;
+				g_suppressDown = false;
+				return;
+			}
 			const menus::Menu menu = menus::Active();
 			if (menu != g_prevMenu) {
 				ResetMenuState();
