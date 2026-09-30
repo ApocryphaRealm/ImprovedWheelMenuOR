@@ -234,8 +234,11 @@ namespace favourites
 				col.form = magic ? rows::MagicRowSpell(row) : rows::InventoryRowForm(row);
 				col.shown = -1;
 			}
-			const int fav = col.form && favs.contains(col.form) ? 1 : 0;
+			// armour and clothing never go on the wheel (shields do): no star on their rows
+			const bool can = magic || !col.form || wheels::CanFavourite(col.form);
+			const int fav = !can ? 2 : col.form && favs.contains(col.form) ? 1 : 0;
 			if (fav != col.shown) {
+				ui::Visible(reflect::Get(col.overlay), fav != 2);
 				ui::Visible(reflect::Get(col.fill), fav == 1);
 				col.shown = fav;
 				++drawn;

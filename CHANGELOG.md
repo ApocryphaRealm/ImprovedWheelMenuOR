@@ -6,6 +6,17 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Changed: favourites stack with their kind** (the owner: "similar types of items stack in the same slot when they're
+  favorited. So that great swords go to great swords, claymores to claymores, maces to maces"). Y (or a star) puts an
+  item first in a slot already holding its kind, with room - a weapon by its type (blade or blunt, one- or two-handed,
+  staff, bow), anything else by its form type - then an empty slot, then any slot with room.
+- **Changed: armour and clothing are favourites, never on the wheel - shields go on it** (the owner: "I don't want armor
+  that's favorited to appear on the wheel at all. I just want the shields", then "It should be fine to favorite armor, just
+  not added to the wheel"). Y or a star on armour or clothing (body slot 13, the shield, excepted) keeps it on a list of
+  its own ("Favourite 1" in the character's file): it cannot be dropped or sold, its star fills, and it never takes a
+  slot. The game's own assign of armour to a slot is refused; armour already on a slot moves to that list.
+- Known: setting PlayerCharacter::selectedSpell does not move the HUD's spell picture (05:16:54 / 05:17:05: "did NOT
+  change"); the game's own equip path is being traced.
 - **Changed: pointing only points - RB (or A) uses, LT / RT choose the item, letting go uses nothing** (the owner:
   "instead of using the games vanilla interaction where simply placing the cursor over the item selects it now that we
   have multiple items per slot will have to have the the right bumper activate the item and the right trigger and left

@@ -39,6 +39,7 @@ namespace wheels
 	// every item on the Equipment or Ammo wheel, and a count that moves whenever any wheel changes (the favourites column)
 	std::unordered_set<std::uint32_t> Favourites();
 	std::uint32_t Generation();
+	bool CanFavourite(std::uint32_t a_formID);   // any carried item (armour and clothing: a favourite, never on the wheel)
 	void ToggleItem(std::uint32_t a_formID);   // the star in the inventory's favourites column: as Y on that item
 	std::unordered_set<std::uint32_t> MagicFavourites();   // every spell on the Magic wheel
 	// each slot's entry count (key order) and the most a slot holds (uEntriesPerSlot): the slot counters ("3/5")

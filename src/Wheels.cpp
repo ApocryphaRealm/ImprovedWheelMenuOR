@@ -17,8 +17,10 @@ namespace wheels
 		constexpr int kEquip = 0;
 		constexpr int kMagic = 1;
 		constexpr int kAmmo = 2;   // the bow's ammo wheel: one arrow kind a slot, entirely ours
-		constexpr int kWheels = 3;
-		constexpr const char* kWheelNames[kWheels] = { "Equipment", "Magic", "Ammo" };
+		constexpr int kFav = 3;    // favourites that go on no wheel: armour and clothing (the owner, 2026-09-30: "It should be fine
+		                           // to favorite armor, just not added to the wheel") - all in slot 1, no cap
+		constexpr int kWheels = 4;
+		constexpr const char* kWheelNames[kWheels] = { "Equipment", "Magic", "Ammo", "Favourite" };
 
 		std::atomic<int> g_active{ static_cast<int>(Wheel::kEquipment) };
 
@@ -43,6 +45,28 @@ namespace wheels
 		{
 			auto* form = a_id ? RE::TESForm::LookupByID(a_id) : nullptr;
 			return form && form->GetFormType() == RE::FormType::Ammo;
+		}
+
+		// Armour and clothing never go on the wheel - shields do (the owner, 2026-09-30: "I don't want armor that's favorited
+		// to appear on the wheel at all. I just want the shields to be appearing on it"). Oblivion's body slot 13 is the shield.
+		constexpr std::uint16_t kShieldSlot = 1u << 13;
+
+		bool Wearable(std::uint32_t a_id, bool* a_shield = nullptr)
+		{
+			auto* form = a_id ? RE::TESForm::LookupByID(a_id) : nullptr;
+			if (!form) return false;
+			const RE::TESBipedModelForm* biped = nullptr;
+			if (form->GetFormType() == RE::FormType::Armor) biped = form->As<RE::TESObjectARMO>();
+			else if (form->GetFormType() == RE::FormType::Clothing) biped = form->As<RE::TESObjectCLOT>();
+			if (!biped) return false;
+			if (a_shield) *a_shield = (biped->bipedModelData.bipedObjectSlots & kShieldSlot) != 0;
+			return true;
+		}
+
+		bool AllowedOnEquipment(std::uint32_t a_id)
+		{
+			bool shield = false;
+			return !Wearable(a_id, &shield) || shield;
 		}
 
 		std::string NameOf(int a_wheel, std::uint32_t a_id)
@@ -118,7 +142,7 @@ namespace wheels
 					logger::warn("wheels: unreadable line in {}: {}", path.filename().string(), line);
 					continue;
 				}
-				Slot& slot = g_wheels[wheel == "Magic" ? kMagic : wheel == "Ammo" ? kAmmo : kEquip][slotNo - 1];
+				Slot& slot = g_wheels[wheel == "Magic" ? kMagic : wheel == "Ammo" ? kAmmo : wheel == "Favourite" ? kFav : kEquip][slotNo - 1];
 				std::string id;
 				while (in >> id) {
 					slot.entries.push_back(static_cast<std::uint32_t>(std::stoul(id, nullptr, 16)));
@@ -462,6 +486,17 @@ namespace wheels
 					}
 				}
 			}
+			if (!AllowedOnEquipment(a_arrived)) {
+				inventory::ClearKey(a_arrived);
+				if (previous) {
+					inventory::SetKey(previous, a_slot);
+				}
+				logger::info("wheels: the game assigned {} to slot {} - armour and clothing never go on the wheel (shields do); the slot keeps {}",
+					inventory::NameOf(a_arrived), a_slot + 1, previous ? inventory::NameOf(previous) : "nothing");
+				Save();
+				PatchChanged(original);
+				return;
+			}
 			const int idx = IndexOf(slot, a_arrived);
 			if (a_arrived == previous) {
 				// pressed again on the item the slot shows: out it goes, the next entry takes its place
@@ -509,9 +544,49 @@ namespace wheels
 			logger::info("wheels: the assign changed nothing (slot {}) - left as it was", p.slot + 1);
 		}
 
+		// An item's kind, for putting like with like (the owner, 2026-09-30: "similar types of items stack in the same slot
+		// when they're favorited. So that great swords go to great swords, claymores to claymores, maces to maces"): a
+		// weapon by its type (blade or blunt, one- or two-handed, staff, bow), armour and clothing by the body slot they
+		// fill (the lowest slot bit), anything else by its form type. 0 = not known.
+		std::uint32_t KindOf(std::uint32_t a_id)
+		{
+			auto* form = a_id ? RE::TESForm::LookupByID(a_id) : nullptr;
+			if (!form) return 0;
+			const auto type = form->GetFormType();
+			if (type == RE::FormType::Weapon) {
+				auto* weap = form->As<RE::TESObjectWEAP>();
+				return weap ? 0x100u + static_cast<std::uint32_t>(weap->data.type) : 0;
+			}
+			const RE::TESBipedModelForm* biped = nullptr;
+			if (type == RE::FormType::Armor) biped = form->As<RE::TESObjectARMO>();
+			else if (type == RE::FormType::Clothing) biped = form->As<RE::TESObjectCLOT>();
+			if (biped) {
+				const std::uint32_t slots = biped->bipedModelData.bipedObjectSlots;
+				std::uint32_t low = 0;
+				while (low < 16 && !(slots & (1u << low))) ++low;
+				return (type == RE::FormType::Armor ? 0x200u : 0x300u) + low;
+			}
+			return 0x400u + static_cast<std::uint32_t>(type);
+		}
+
 		// Y: on its wheel (the first slot with room) or off it (wherever it is)
 		void ToggleFavourite(int a_wheel, std::uint32_t a_id)
 		{
+			// armour and clothing: a favourite, never on the wheel (shields go on it)
+			if (a_wheel == kEquip && !AllowedOnEquipment(a_id)) {
+				Slot& fav = g_wheels[kFav][0];
+				if (const int idx = IndexOf(fav, a_id); idx >= 0) {
+					fav.entries.erase(fav.entries.begin() + idx);
+					logger::info("wheels: Favourite toggled off - {} (armour or clothing: a favourite, not on the wheel)", inventory::NameOf(a_id));
+				} else {
+					fav.entries.push_back(a_id);
+					logger::info("wheels: Favourite - {} is a favourite now (armour or clothing: not put on the wheel; shields go on it)",
+						inventory::NameOf(a_id));
+				}
+				fav.active = fav.entries.empty() ? -1 : 0;
+				Save();
+				return;
+			}
 			const auto before = inventory::Keys();
 			for (int s = 0; s < inventory::kSlots; ++s) {
 				const int idx = IndexOf(g_wheels[a_wheel][s], a_id);
@@ -524,7 +599,24 @@ namespace wheels
 					return;
 				}
 			}
-			// an empty slot first, then any slot with room (the Ammo wheel: one arrow kind a slot, empty slots only)
+
+			// the Equipment wheel: like with like first - a slot already holding this kind of item, with room
+			if (a_wheel == kEquip) {
+				if (const auto kind = KindOf(a_id)) {
+					for (int s = 0; s < inventory::kSlots; ++s) {
+						const Slot& slot = g_wheels[a_wheel][s];
+						if (slot.entries.empty() || static_cast<int>(slot.entries.size()) >= Cap()) continue;
+						const bool same = std::any_of(slot.entries.begin(), slot.entries.end(), [&](std::uint32_t e) { return KindOf(e) == kind; });
+						if (same && AddTo(a_wheel, s, a_id, "Favourite (with its kind)")) {
+							Save();
+							PatchChanged(before);
+							Refresh();
+							return;
+						}
+					}
+				}
+			}
+			// then an empty slot, then any slot with room (the Ammo wheel: one arrow kind a slot, empty slots only)
 			for (int pass = 0; pass < (a_wheel == kAmmo ? 1 : 2); ++pass) {
 				for (int s = 0; s < inventory::kSlots; ++s) {
 					const Slot& slot = g_wheels[a_wheel][s];
@@ -554,6 +646,15 @@ namespace wheels
 						continue;   // a removal above re-seated the slot
 					}
 					const auto id = g_wheels[kEquip][s].entries[i];
+					if (!AllowedOnEquipment(id)) {
+						RemoveAt(kEquip, s, i, "armour and clothing never go on the wheel (shields do) - it stays a favourite");
+						if (IndexOf(g_wheels[kFav][0], id) < 0) {
+							g_wheels[kFav][0].entries.push_back(id);
+							g_wheels[kFav][0].active = 0;
+						}
+						++moved;
+						continue;
+					}
 					if (!IsAmmo(id)) {
 						continue;
 					}
@@ -625,7 +726,7 @@ namespace wheels
 		if (!a_formID || !EnsureLoaded()) {
 			return false;
 		}
-		for (const int w : { kEquip, kAmmo }) {
+		for (const int w : { kEquip, kAmmo, kFav }) {
 			for (const Slot& slot : g_wheels[w]) {
 				if (IndexOf(slot, a_formID) >= 0) {
 					return true;
@@ -641,7 +742,7 @@ namespace wheels
 		if (!EnsureLoaded()) {
 			return out;
 		}
-		for (const int w : { kEquip, kAmmo }) {
+		for (const int w : { kEquip, kAmmo, kFav }) {
 			for (const Slot& slot : g_wheels[w]) {
 				out.insert(slot.entries.begin(), slot.entries.end());
 			}
@@ -650,6 +751,11 @@ namespace wheels
 	}
 
 	std::uint32_t Generation() { return g_generation.load(std::memory_order_relaxed); }
+
+	bool CanFavourite(std::uint32_t a_formID)
+	{
+		return a_formID != 0;   // armour too: a favourite, just never on the wheel
+	}
 
 	void ToggleItem(std::uint32_t a_formID)
 	{
