@@ -123,6 +123,7 @@ namespace favourites
 			if (!overlayClass || !horizontal || !tree) {
 				static bool logged = false;
 				if (!logged) logger::warn("favourites: a row has no {} - no column", !horizontal ? "inv_entry_horizontal" : "widget tree");
+				if (!logged && !horizontal) logger::warn("favourites: the row's tree root is {}", tree ? pe::Utf8(tree->GetFName().ToString()) : std::string("none"));
 				logged = true;
 				return false;
 			}
@@ -160,7 +161,9 @@ namespace favourites
 			a_col.rowSlot = a_row->internalIndex;
 			a_col.shown = -1;
 			a_col.key.clear();
-			if (g_built == 1) {
+			static bool firstLogged = false;
+			if (!firstLogged) {
+				firstLogged = true;
 				logger::info("favourites: the first row's column is built (fill {}, outline {}, button {})", fill ? "yes" : "NO", outline ? "yes" : "NO",
 					button ? "yes" : "NO");
 			}

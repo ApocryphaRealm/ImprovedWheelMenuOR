@@ -6,6 +6,13 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: items favourited back onto the inventory wheel stayed invisible** (the owner: after he "deselected the weapons
+  from the wheel and tried favoriting them back, they didn't appear in the wheel menu"). The game keeps a slot's old
+  picture after an item leaves its key, and a key with a picture and no item was read as a spell and its picture's
+  opacity set to 0 on the game's wheel - never put back, so whatever went there next stayed invisible (04:18:54, the
+  mace's old slot 7). A key now counts as a spell only when its picture is one of the game's magic icons (the texture's
+  own path, /icons/magic/), and a blanked slot gets the game's opacity back as soon as it stops being one.
+- The wheels stand down while Tween Menu's menu is open (TweenMenu_IsOpen, Tween Menu 1.0.1).
 - **Fixed: the Magic wheel never drew, and the favourites column never appeared** (the owner's screenshots of 03:38:40
   and 03:38:46: the magic menu's wheel still showed a bow, a sword, a torch; the log: "the game's wheel picture is NOT
   FOUND (quickKeys_material)", "a row has no inv_entry_horizontal - no column"). GetWidgetFromName found neither widget

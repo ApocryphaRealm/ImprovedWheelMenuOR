@@ -253,7 +253,27 @@ namespace magicwheel
 			}
 		}
 
-		// the inventory wheel: a key with a picture and no item is a spell the game kept - drawn empty
+		// A picture is a spell's when it is one of the game's magic icons (/Game/Art/UI/Icons/Dynamic_Icons/menus/icons/magic/
+		// ...) - asked of the texture's own path, once per texture. A key with a picture and no item is NOT enough: the game
+		// keeps a slot's old picture after an item leaves its key, and treating that as a spell blanked the slot for good
+		// (the owner, 2026-09-30: weapons favourited back "didn't appear in the wheel menu", after 04:18:54 read the mace's
+		// old slot 7 as a spell).
+		bool IsSpellPicture(UE::UObject* a_icon)
+		{
+			static std::unordered_map<UE::UObject*, bool> s_known;
+			if (!a_icon) return false;
+			if (const auto it = s_known.find(a_icon); it != s_known.end()) return it->second;
+			std::string path = pe::Utf8(a_icon->GetFullName());
+			for (auto& c : path) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			const bool spell = path.find("/icons/magic/") != std::string::npos;
+			s_known[a_icon] = spell;
+			return spell;
+		}
+
+		std::array<float, 8> g_savedOpacity{};   // a blanked slot's opacity as the game had it, put back when it stops being a spell
+		std::array<bool, 8>  g_blanked{};
+
+		// the inventory wheel: a key that shows a spell's picture and holds no item is a spell the game kept - drawn empty
 		void HideSpellKeys(UE::UObject* a_wheel)
 		{
 			const ULONGLONG now = GetTickCount64();
@@ -261,19 +281,30 @@ namespace magicwheel
 			g_nextEquip = now + 100;   // the inventory walk is not free
 			auto* gameImg = GameImage(a_wheel);
 			auto* gameMid = gameImg ? ui::BrushResource(gameImg) : nullptr;
+			if (!IsMid(gameMid)) gameMid = nullptr;
 			const auto keys = inventory::Keys();
 			const auto icons = quickkeys::ReadIcons();
 			for (int k = 0; k < 8; ++k) {
-				const bool spell = icons[static_cast<std::size_t>(k)] && !keys[static_cast<std::size_t>(k)];
-				if (spell != g_spellKey[static_cast<std::size_t>(k)]) {
-					g_spellKey[static_cast<std::size_t>(k)] = spell;
-					if (spell) logger::info("magic wheel: the game's key {} holds no item (a spell) - drawn empty on the inventory wheel", k + 1);
+				const auto u = static_cast<std::size_t>(k);
+				const bool spell = !keys[u] && IsSpellPicture(icons[u]);
+				if (spell != g_spellKey[u]) {
+					g_spellKey[u] = spell;
+					if (spell) logger::info("magic wheel: the game's key {} holds a spell - drawn empty on the inventory wheel", k + 1);
 				}
-				if (spell && IsMid(gameMid)) {
-					const std::wstring name = L"ID" + std::to_wstring(k + 1) + L"_Opacity";
-					if (ui::MidScalar(gameMid, name.c_str()) > 0.0f) {
+				const std::wstring name = L"ID" + std::to_wstring(k + 1) + L"_Opacity";
+				if (spell && gameMid) {
+					const float op = ui::MidScalar(gameMid, name.c_str());
+					if (op > 0.0f) {
+						if (!g_blanked[u]) g_savedOpacity[u] = op;
 						ui::SetMidScalar(gameMid, name.c_str(), 0.0f);   // the game puts it back when it redraws: set again here
+						g_blanked[u] = true;
 					}
+				} else if (g_blanked[u]) {
+					if (gameMid && ui::MidScalar(gameMid, name.c_str()) == 0.0f) {
+						ui::SetMidScalar(gameMid, name.c_str(), g_savedOpacity[u] > 0.0f ? g_savedOpacity[u] : 1.0f);
+					}
+					g_blanked[u] = false;
+					logger::info("magic wheel: the game's key {} no longer holds a spell - its picture shown again", k + 1);
 				}
 			}
 		}
