@@ -6,6 +6,10 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- Diagnostics: one "pad: radial session" line per HUD radial open - reads on our thread and on other threads (which the
+  rules never touch), the largest LT / RT and stick values, the trigger presses seen, pointed-slot changes, rest snaps and
+  reads stood down for AMF / Tween Menu - after the owner's report that LT / RT never cycled, the rest snap never fired
+  and pointing alone selected (the 05:26 run logged no CYCLE and no rest snap at all).
 - **Fixed: A in the magic menu did not equip a spell** (the owner, 2026-09-30: "I tried to select the alteration
   spell in there, but it wouldn't let me select it"). The wheel panel read as showing from the menu's opening, and every A
   was taken for an assign with no slot pointed. A is now the Magic wheel's only when a slot is pointed; otherwise the game

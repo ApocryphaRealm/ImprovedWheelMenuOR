@@ -37,6 +37,20 @@ namespace pad
 		// stays on the game thread.
 		DWORD g_gameThread = 0;
 		std::atomic<std::uint64_t> g_otherThreadReads{ 0 };
+		// what one HUD radial session saw (2026-09-30: LT / RT never cycled, the rest snap never fired, and the owner
+		// reported pointing alone selecting - one summary line per session says whether our thread saw the triggers and
+		// the stick at all, and how many reads went by on other threads that the rules never touch)
+		std::atomic<bool>          g_diagOpen{ false };
+		std::atomic<std::uint64_t> g_diagOther{ 0 };
+		std::uint64_t              g_diagStoodDown = 0;   // radial reads skipped because AMF's window or Tween Menu said it was open
+		struct RadialDiag
+		{
+			std::uint64_t reads = 0;
+			BYTE          maxLT = 0, maxRT = 0;
+			double        maxRight = 0, maxLeft = 0;
+			int           ltEdges = 0, rtEdges = 0, restSnaps = 0, pointedEvents = 0, lastPointed = -2;
+			Clock::time_point opened{};
+		} g_diag;
 
 		// rule 64: presses queued by the iwm.pad TestBench tool, laid over the real pad on the game thread
 		std::mutex        g_injectLock;
@@ -135,6 +149,7 @@ namespace pad
 					if (quickkeys::PointedSlot() >= 1) {
 						quickkeys::CancelChoice();
 						logger::info("pad: the right stick came back to rest - the wheel points at no slot (centre rest snap)");
+						++g_diag.restSnaps;
 					}
 				}
 			}
@@ -270,6 +285,7 @@ namespace pad
 
 			const auto now = Clock::now();
 			if (AmfMenuOpen() || TweenMenuOpen()) {
+				if (quickkeys::RadialOpen()) ++g_diagStoodDown;   // counted in the radial session's summary
 				// the framework's window (or Tween Menu's menu) has the pad: no wheel rule runs, the read goes on untouched (its gate hides it
 				// from the game); an open ammo wheel closes, a latched wheel lets go
 				WORD untouched = raw;
@@ -278,6 +294,37 @@ namespace pad
 				g_latched = false;
 				g_suppressDown = false;
 				return;
+			}
+			// the radial session's measurements (diagnostics only - nothing here changes the read)
+			{
+				const bool open = quickkeys::RadialOpen();
+				if (open && !g_diagOpen.load(std::memory_order_relaxed)) {
+					g_diag = {};
+					g_diag.opened = now;
+					g_diagOther.store(0, std::memory_order_relaxed);
+					g_diagStoodDown = 0;
+					g_diagOpen.store(true, std::memory_order_relaxed);
+				}
+				if (open) {
+					++g_diag.reads;
+					g_diag.maxLT = std::max(g_diag.maxLT, a_pad.bLeftTrigger);
+					g_diag.maxRT = std::max(g_diag.maxRT, a_pad.bRightTrigger);
+					g_diag.maxRight = std::max(g_diag.maxRight, std::hypot(a_pad.sThumbRX / 32767.0, a_pad.sThumbRY / 32767.0));
+					g_diag.maxLeft = std::max(g_diag.maxLeft, std::hypot(a_pad.sThumbLX / 32767.0, a_pad.sThumbLY / 32767.0));
+					g_diag.ltEdges += ltPressed ? 1 : 0;
+					g_diag.rtEdges += rtPressed ? 1 : 0;
+					const int pointed = quickkeys::PointedSlot();
+					if (pointed != g_diag.lastPointed) {
+						g_diag.lastPointed = pointed;
+						++g_diag.pointedEvents;
+					}
+				} else if (g_diagOpen.load(std::memory_order_relaxed)) {
+					g_diagOpen.store(false, std::memory_order_relaxed);
+					const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_diag.opened).count();
+					logger::info("pad: radial session {} ms - {} read(s) here, {} on other threads (untouched); max LT {} RT {}, right stick {:.2f}, left stick {:.2f}; LT / RT presses seen {} / {}; pointed-slot changes {}; rest snaps {} (bCentreRestSnap {}); reads stood down for AMF / Tween Menu {}",
+						ms, g_diag.reads, g_diagOther.load(std::memory_order_relaxed), g_diag.maxLT, g_diag.maxRT, g_diag.maxRight, g_diag.maxLeft,
+						g_diag.ltEdges, g_diag.rtEdges, g_diag.pointedEvents, g_diag.restSnaps, settings::Get().centreRestSnap, g_diagStoodDown);
+				}
 			}
 			const menus::Menu menu = menus::Active();
 			if (menu != g_prevMenu) {
@@ -513,6 +560,9 @@ namespace pad
 		DWORD WINAPI Chained(DWORD a_user, XINPUT_STATE* a_state)
 		{
 			if (GetCurrentThreadId() != g_gameThread) {
+				if (g_diagOpen.load(std::memory_order_relaxed)) {
+					g_diagOther.fetch_add(1, std::memory_order_relaxed);
+				}
 				if (g_otherThreadReads.fetch_add(1, std::memory_order_relaxed) == 0) {
 					logger::info("pad: thread {} also reads the controller through the game's import - passed through untouched", GetCurrentThreadId());
 				}
