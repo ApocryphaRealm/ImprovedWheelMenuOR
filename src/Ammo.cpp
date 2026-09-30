@@ -24,7 +24,8 @@ namespace ammo
 
 		// ---- the widget (game thread; kept across frames as slot-checked handles) ----
 		reflect::Handle g_root, g_label;
-		std::array<reflect::Handle, kSlots> g_icon;
+		std::array<reflect::Handle, kSlots> g_icon, g_iconSlot, g_ring, g_ringSlot;   // each entry: its circle, its arrows on it
+		int       g_layoutCount = -1;   // the entry count the positions were last laid out for
 		std::array<std::uint32_t, kSlots>   g_shownIds{};
 		int       g_builds = 0;
 		ULONGLONG g_lastBuild = 0;
@@ -36,7 +37,8 @@ namespace ammo
 		bool              g_pointedByStick = false;
 		bool              g_resting = true;
 		Clock::time_point g_restSince{};
-		std::array<std::uint32_t, kSlots> g_ids{};   // what the wheel holds while it is open
+		std::array<std::uint32_t, kSlots> g_ids{};   // what the wheel holds while it is open: the favourited arrows, packed
+		int               g_count = 0;               // how many of g_ids are entries
 		std::uint32_t     g_worn = 0;                // the arrows worn when it opened
 		int               g_drawnPointed = -2;
 		WORD              g_swallow = 0;             // buttons the wheel used: the game never sees them, until let go
@@ -88,18 +90,42 @@ namespace ammo
 
 		double Radius() { return 230.0 * settings::Get().ammoScalePercent / 100.0; }
 
-		// where arrow i sits: on the left half of a circle centred on the middle of the right-hand edge, the top one first
-		// the arc the arrows sit on: 112.5 to 247.5 degrees (straight up is 90), so the top and bottom arrows stay clear
-		// of the screen's edge (the owner, 2026-09-30: "the arrows appear slightly off screen in the arrow ammo wheel" -
-		// spread over the whole half circle, the end ones sat on the edge)
-		constexpr double kArcFrom = 112.5, kArcTo = 247.5;
-		double SlotAngle(int a_i) { return kArcFrom + a_i * (kArcTo - kArcFrom) / (kSlots - 1); }
+		// The entries, as in the Skyrim Perfected Wheeler's ammo wheel (the owner, 2026-09-30: "if you only have one arrow
+		// ... favorited to it, then it centers to the middle of the semicircle and for every additional favorited arrow type
+		// it adds an additional radial entry"): n entries centred on 180 degrees (the middle of the half circle, straight
+		// left; straight up is 90), 22.5 degrees apart, closer when that would reach past 112.5 / 247.5 - where the end
+		// ones would touch the screen's edge ("the arrows appear slightly off screen").
+		constexpr double kArcFrom = 112.5, kArcTo = 247.5, kStep = 22.5;
+		double EntryAngle(int a_i, int a_n)
+		{
+			if (a_n <= 1) return 180.0;
+			const double step = std::min(kStep, (kArcTo - kArcFrom) / (a_n - 1));
+			return 180.0 + (a_i - (a_n - 1) * 0.5) * step;
+		}
 
-		std::array<double, 2> Place(int a_i)
+		std::array<double, 2> Place(int a_i, int a_n)
 		{
 			const double R = Radius(), r = R * 0.62;
-			const double th = SlotAngle(a_i) * std::numbers::pi / 180.0;
+			const double th = EntryAngle(a_i, a_n) * std::numbers::pi / 180.0;
 			return { R + r * std::cos(th), R - r * std::sin(th) };
+		}
+
+		// each entry's circle and arrows placed for a_n entries; the rest hidden
+		void Layout(int a_n)
+		{
+			if (a_n == g_layoutCount) return;
+			for (int i = 0; i < kSlots; ++i) {
+				const bool on = i < a_n;
+				if (on) {
+					const auto p = Place(i, a_n);
+					if (auto* rs = reflect::Get(g_ringSlot[i])) ui::Vec2(rs, L"SetPosition", p[0], p[1]);
+					if (auto* is = reflect::Get(g_iconSlot[i])) ui::Vec2(is, L"SetPosition", p[0], p[1]);
+				}
+				ui::Visible(reflect::Get(g_ring[i]), on);
+				if (!on) ui::Visible(reflect::Get(g_icon[i]), false);
+			}
+			g_layoutCount = a_n;
+			g_shownIds = {};   // the pictures are drawn again for the new places
 		}
 
 		void White(UE::UObject* a_label)
@@ -157,8 +183,26 @@ namespace ammo
 					logger::warn("ammo: the wheel's round back could not be drawn (the brush fields were not found)");
 				}
 			}
+			// every entry: a circle, as the main wheel's slots (a dark disc with a light rim - the game's own slot art once it
+			// is known), and the arrows' picture on it
 			for (int i = 0; i < kSlots; ++i) {
-				g_icon[i] = {};
+				g_ring[i] = g_ringSlot[i] = {};
+				UE::UObject* rs = nullptr;
+				if (auto* ring = ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoRing" + n + L"_" + std::to_wstring(i)).c_str(), &rs)) {
+					ui::Anchors(rs, 0, 0, 0, 0);
+					ui::Vec2(rs, L"SetAlignment", 0.5, 0.5);
+					ui::Vec2(rs, L"SetSize", R * 0.30, R * 0.30);
+					const float fill[4] = { 0.02f, 0.02f, 0.02f, 0.92f };
+					const float rim[4] = { 0.80f, 0.76f, 0.68f, 0.95f };
+					ui::RoundedBox(ring, true, fill, rim, 2.5f);
+					ui::Vec2(ring, L"SetRenderTransformPivot", 0.5, 0.5);
+					ui::Visible(ring, false);
+					g_ring[i] = reflect::Hold(ring);
+					g_ringSlot[i] = reflect::Hold(rs);
+				}
+			}
+			for (int i = 0; i < kSlots; ++i) {
+				g_icon[i] = g_iconSlot[i] = {};
 				UE::UObject* s = nullptr;
 				auto* img = ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoIcon" + n + L"_" + std::to_wstring(i)).c_str(), &s);
 				if (!img) {
@@ -166,13 +210,13 @@ namespace ammo
 				}
 				ui::Anchors(s, 0, 0, 0, 0);
 				ui::Vec2(s, L"SetAlignment", 0.5, 0.5);
-				const auto p = Place(i);
-				ui::Vec2(s, L"SetPosition", p[0], p[1]);
-				ui::Vec2(s, L"SetSize", R * 0.24, R * 0.24);
+				ui::Vec2(s, L"SetSize", R * 0.21, R * 0.21);
 				ui::Vec2(img, L"SetRenderTransformPivot", 0.5, 0.5);
 				ui::Visible(img, false);
 				g_icon[i] = reflect::Hold(img);
+				g_iconSlot[i] = reflect::Hold(s);
 			}
+			g_layoutCount = -1;
 			// the pointed arrows' name, left of the wheel (outside the clipped panel)
 			UE::UObject* labelSlot = nullptr;
 			auto* label = ui::AddToCanvas(canvas, L"/Game/UI/Modern/Prefabs/WBP_AltarTextBlock.WBP_AltarTextBlock_C", (L"IwmAmmoLabel" + n).c_str(),
@@ -267,13 +311,20 @@ namespace ammo
 			if (g_pointed == g_drawnPointed) {
 				return;
 			}
+			for (int i = 0; i < g_count; ++i) {
+				if (auto* ring = reflect::Get(g_ring[i])) {
+					const bool on = i == g_pointed;
+					ui::Vec2(ring, L"SetRenderScale", on ? 1.2 : 1.0, on ? 1.2 : 1.0);
+					ui::Colour(ring, on ? 1.0f : 0.85f, on ? 0.86f : 0.85f, on ? 0.55f : 0.85f, 1.0f);   // the pointed one's rim warms
+				}
+			}
 			for (int i = 0; i < kSlots; ++i) {
 				auto* img = reflect::Get(g_icon[i]);
 				if (!img || !g_ids[i]) {
 					continue;
 				}
 				const bool on = i == g_pointed;
-				ui::Vec2(img, L"SetRenderScale", on ? 1.35 : 1.0, on ? 1.35 : 1.0);
+				ui::Vec2(img, L"SetRenderScale", on ? 1.3 : 1.0, on ? 1.3 : 1.0);
 				if (g_ids[i] == g_worn) {
 					ui::Colour(img, 1.0f, 0.82f, 0.35f, on ? 1.0f : 0.85f);   // the arrows worn now: gold
 				} else {
@@ -344,14 +395,9 @@ namespace ammo
 		// the next filled slot from a_from (-1 = none yet) in a_dir
 		int Step(int a_from, int a_dir)
 		{
-			int i = a_from < 0 ? (a_dir > 0 ? -1 : kSlots) : a_from;
-			for (int k = 0; k < kSlots; ++k) {
-				i = (i + a_dir + kSlots) % kSlots;
-				if (g_ids[i]) {
-					return i;
-				}
-			}
-			return -1;
+			if (g_count <= 0) return -1;
+			if (a_from < 0) return a_dir > 0 ? 0 : g_count - 1;
+			return (a_from + a_dir + g_count) % g_count;
 		}
 
 		// the filled slot nearest where the right stick points (y up), or -1
@@ -364,24 +410,16 @@ namespace ammo
 			if (th < 90.0 || th > 270.0) {
 				th = a_y >= 0 ? kArcFrom : kArcTo;   // pointed right, off the wheel: the nearer end
 			}
-			int    i = 0;
+			int    i = -1;
 			double best = 1e9;
-			for (int k = 0; k < kSlots; ++k) {   // the slot whose angle is nearest
-				const double d = std::abs(th - SlotAngle(k));
+			for (int k = 0; k < g_count; ++k) {   // the entry whose angle is nearest
+				const double d = std::abs(th - EntryAngle(k, g_count));
 				if (d < best) {
 					best = d;
 					i = k;
 				}
 			}
-			for (int d = 0; d < kSlots; ++d) {
-				if (i - d >= 0 && g_ids[i - d]) {
-					return i - d;
-				}
-				if (i + d < kSlots && g_ids[i + d]) {
-					return i + d;
-				}
-			}
-			return -1;
+			return i;
 		}
 	}
 
@@ -403,12 +441,15 @@ namespace ammo
 			if (!Built() && !Build()) {
 				return false;
 			}
-			g_ids = wheels::AmmoSlots();
-			g_worn = worn;
-			int filled = 0;
-			for (const auto id : g_ids) {
-				filled += id ? 1 : 0;
+			// the favourited arrows, packed in slot order: one entry each
+			g_ids = {};
+			g_count = 0;
+			for (const auto id : wheels::AmmoSlots()) {
+				if (id && g_count < kSlots) g_ids[static_cast<std::size_t>(g_count++)] = id;
 			}
+			g_worn = worn;
+			const int filled = g_count;
+			Layout(g_count);
 			g_open = true;
 			++g_opens;
 			g_pointed = -1;

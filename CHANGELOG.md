@@ -6,6 +6,16 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Changed: the ammo wheel lays out as the Skyrim Perfected Wheeler's does** (the owner: "if you only have one arrow
+  selected in the ammo wheel or one arrow favorited to it, then it centers to the middle of the semicircle and for every
+  additional favorited arrow type it adds an additional radial entry and each arrow should have the same circle art as
+  the main wheel for each arrow slot").
+  - One entry per favourited arrow type, centred on the middle of the half circle and 22.5 degrees apart, closer only
+    when the entries would reach the screen's edge.
+  - Every entry sits on its own circle, which grows and warms when pointed. The circle is a drawn dark disc with a light
+    rim until the main wheel's own slot art is identified; the primary session's ue.tree dump of the wheel was asked
+    for.
+  - The right stick picks the nearest entry, and D-pad up / down step through the entries.
 - **Fixed: the magic menu showed the inventory wheel's pictures** (the owner: "I still don't see the magic wheel in the
   magic inventory" - "the magic menu wheel is a distinct separate wheel from the inventory wheel. And just like the
   inventory wheel, even if it's empty, it's still visible and it still draws. It would just be empty").
