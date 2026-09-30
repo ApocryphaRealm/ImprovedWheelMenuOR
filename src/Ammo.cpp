@@ -1,6 +1,7 @@
 #include "Ammo.h"
 
 #include "Inventory.h"
+#include "PEHook.h"
 #include "Reflect.h"
 #include "Rows.h"
 #include "Settings.h"
@@ -42,7 +43,8 @@ namespace ammo
 		constexpr const wchar_t* kWheelMic = L"/Game/UI/Materials/QuickKeys/MIC_UI_QuickKeys.MIC_UI_QuickKeys";
 		constexpr double         kOverhang = 0.14;   // past the middle, in wheel radii: the top and bottom slots stay whole
 		constexpr int            kHalfSlots = 5;
-		reflect::Handle          g_mid;
+		constexpr float          kHiddenSelector = 2.0f / 8.0f;   // slot 3, straight right: outside the half that shows
+		reflect::Handle          g_mid, g_wheelImg;
 		bool                     g_material = false;
 		std::array<int, kSlots>  g_entryId{};            // the wheel slot (1-8) each entry sits in
 		std::array<UE::UObject*, 9> g_midTex{};          // the texture last set in each slot (1-8)
@@ -84,6 +86,56 @@ namespace ammo
 			c.Set("Value", a_tex);
 			c.Run();
 		}
+		// A dynamic instance of the wheel's material on a_image: every slot empty, the selector on the hidden half. The
+		// caches of what was written are reset, so the next draw writes everything again.
+		UE::UObject* MakeMid(UE::UObject* a_image, UE::UObject* a_mic)
+		{
+			static auto* mlib = ui::Class(L"/Script/Engine.KismetMaterialLibrary");
+			ui::Call c(mlib ? mlib->GetDefaultObject(false) : nullptr, L"CreateDynamicMaterialInstance");
+			c.Set("WorldContextObject", ui::PlayerController());
+			c.Set("Parent", a_mic);
+			auto* mid = c.RunGuarded() ? c.Get<UE::UObject*>("ReturnValue") : nullptr;
+			if (!mid || !a_image) return nullptr;
+			ui::Call b(a_image, L"SetBrushFromMaterial");
+			b.Set("Material", mid);
+			if (!b.Run()) return nullptr;
+			for (int k = 1; k <= 8; ++k) MidScalar(mid, (L"ID" + std::to_wstring(k) + L"_Opacity").c_str(), 0.0f);
+			MidScalar(mid, L"SelectorArrowAlpha", 0.0f);
+			MidScalar(mid, L"SelectorRotator", kHiddenSelector);
+			g_midTex = {};
+			g_midOpacity.fill(-1.0f);
+			g_midPointed = -2;
+			return mid;
+		}
+
+		// what the wheel's image draws now: its brush's ResourceObject (rule 30 - asked of the object, not assumed)
+		UE::UObject* DrawnResource(UE::UObject* a_image)
+		{
+			static auto* brushStruct = reinterpret_cast<UE::UStruct*>(UE::StaticFindObject<UE::UObject>(nullptr, nullptr, L"/Script/SlateCore.SlateBrush"));
+			if (!a_image || !brushStruct) return nullptr;
+			const auto brushOff = reflect::Offset(reinterpret_cast<UE::UStruct*>(a_image->GetClass()), "Brush");
+			const auto resOff = reflect::Offset(brushStruct, "ResourceObject");
+			if (brushOff < 0 || resOff < 0) return nullptr;
+			return *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(a_image) + brushOff + resOff);
+		}
+
+		// On every open: the image must still draw OUR instance (the owner, 2026-09-30: no arrows and "box number eight is
+		// highlighted permanently" - the primary's read found no instance of ours while the wheel was open, so every
+		// parameter written went nowhere and the image showed the material's defaults). Made again when it does not.
+		void EnsureMid()
+		{
+			if (!g_material) return;
+			auto* img = reflect::Get(g_wheelImg);
+			auto* mid = reflect::Get(g_mid);
+			auto* drawn = DrawnResource(img);
+			if (img && mid && drawn == mid) return;
+			auto* mic = ui::Load(kWheelMic);
+			auto* made = img && mic ? MakeMid(img, mic) : nullptr;
+			g_mid = made ? reflect::Hold(made) : reflect::Handle{};
+			logger::warn("ammo: the wheel's material instance was {} (its image draws {}) - {}", mid ? "not the one drawn" : "gone",
+				drawn ? pe::Utf8(drawn->GetFName().ToString()) : std::string("nothing"), made ? "made again" : "could NOT be made again");
+		}
+
 		std::array<std::uint32_t, kSlots>   g_shownIds{};
 		int       g_builds = 0;
 		ULONGLONG g_lastBuild = 0;
@@ -248,26 +300,22 @@ namespace ammo
 			g_midTex = {};
 			g_midOpacity.fill(-1.0f);
 			g_midPointed = -2;
+			g_wheelImg = {};
 			if (auto* mic = ui::Load(kWheelMic)) {
-				static auto* mlib = ui::Class(L"/Script/Engine.KismetMaterialLibrary");
-				ui::Call c(mlib ? mlib->GetDefaultObject(false) : nullptr, L"CreateDynamicMaterialInstance");
-				c.Set("WorldContextObject", ui::PlayerController());
-				c.Set("Parent", mic);
-				auto* mid = c.RunGuarded() ? c.Get<UE::UObject*>("ReturnValue") : nullptr;
 				UE::UObject* ws = nullptr;
-				auto* wheelImg = mid ? ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoWheel" + n).c_str(), &ws) : nullptr;
+				auto* wheelImg = ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoWheel" + n).c_str(), &ws);
 				if (wheelImg && ws) {
-					ui::Vec2(panelSlot, L"SetSize", R * (1.0 + kOverhang), 2.0 * R);
 					ui::Anchors(ws, 0, 0, 0, 0);
 					ui::Vec2(ws, L"SetPosition", 0.0, 0.0);
 					ui::Vec2(ws, L"SetSize", 2.0 * R, 2.0 * R);
-					ui::Call b(wheelImg, L"SetBrushFromMaterial");
-					b.Set("Material", mid);
-					b.Run();
-					for (int k = 1; k <= 8; ++k) MidScalar(mid, (L"ID" + std::to_wstring(k) + L"_Opacity").c_str(), 0.0f);
-					MidScalar(mid, L"SelectorArrowAlpha", 0.0f);
-					g_mid = reflect::Hold(mid);
-					g_material = true;
+					if (auto* mid = MakeMid(wheelImg, mic)) {
+						ui::Vec2(panelSlot, L"SetSize", R * (1.0 + kOverhang), 2.0 * R);
+						g_mid = reflect::Hold(mid);
+						g_wheelImg = reflect::Hold(wheelImg);
+						g_material = true;
+					} else {
+						ui::Visible(wheelImg, false);
+					}
 				}
 			}
 			logger::info("ammo: the wheel is {}", g_material ? "the game's own (MIC_UI_QuickKeys), its left half" : "drawn (the game's wheel material could not be instanced)");
@@ -429,7 +477,9 @@ namespace ammo
 			if (g_pointed != g_midPointed) {
 				// the game's own selector: SelectorRotator is a fraction of a turn clockwise from the top (slot n = (n-1)/8)
 				const int slot = g_pointed >= 0 && g_pointed < kHalfSlots ? g_entryId[static_cast<std::size_t>(g_pointed)] : 0;
-				if (slot >= 1) MidScalar(mid, L"SelectorRotator", static_cast<float>(slot - 1) / 8.0f);
+				// nothing pointed (or an empty wheel): the selector goes to slot 3, in the clipped-off right half - the
+				// material's own default lights slot 8 (the owner, 2026-09-30: "box number eight is highlighted permanently")
+				MidScalar(mid, L"SelectorRotator", slot >= 1 ? static_cast<float>(slot - 1) / 8.0f : kHiddenSelector);
 				MidScalar(mid, L"SelectorArrowAlpha", slot >= 1 ? 1.0f : 0.0f);
 				g_midPointed = g_pointed;
 			}
@@ -603,6 +653,7 @@ namespace ammo
 			}
 			g_worn = worn;
 			const int filled = g_count;
+			EnsureMid();
 			Layout(g_count);
 			g_open = true;
 			++g_opens;

@@ -6,6 +6,15 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: the ammo wheel showed the material's defaults** (the owner: no arrows, and "box number eight is highlighted
+  permanently, and it doesn't respond to my right stick movement"). The primary's read with the wheel open found no
+  instance of ours - only the HUD's two - so every parameter written went nowhere. Each open now asks the wheel's image
+  what its brush draws; when it is not our instance, the instance is made again and set (a warning names what it
+  found). With nothing pointed - an empty wheel - the selector goes to slot 3 in the hidden right half, instead of the
+  material's default slot 8.
+  - Known: an arrow's picture still comes from an inventory row seen this session ("no picture for ... yet" in the log).
+    A source that works straight after a load is being looked for.
+  - The 02:37 empty wheel was the owner's Y presses in the inventory removing both arrows (Y toggles a favourite).
 - **Changed: the ammo wheel is the game's own wheel, sliced in half** (the owner: "the arrows icons and slot outline is
   too small for my liking and the highlighting effect is too dim ... basically just a carbon copy of the game's wheel
   menu just sliced in half").
