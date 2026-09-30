@@ -6,6 +6,11 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: the Magic wheel's spell pictures did not load** ("rows: no icon for spell ... (no effect read)"). OBSE's
+  EffectItem layout (+0x20 for the EffectSetting*) read nothing in game; the effect's first 0x60 bytes are now searched,
+  fault-guarded, for a pointer to a live MagicEffect form, and the offset found is kept and logged once.
+- The owner saw the HUD's quick-magic widget dim and light up as active after a Magic wheel choice: selectedSpell is the
+  game's selection - only the HUD's spell picture is not refreshed yet.
 - **Changed: favourites stack with their kind** (the owner: "similar types of items stack in the same slot when they're
   favorited. So that great swords go to great swords, claymores to claymores, maces to maces"). Y (or a star) puts an
   item first in a slot already holding its kind, with room - a weapon by its type (blade or blunt, one- or two-handed,

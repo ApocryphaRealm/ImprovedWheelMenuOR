@@ -348,6 +348,8 @@ namespace rows
 		// A spell's first effect's magic effect. EffectItem is not declared by CommonLibOB64; Oblivion's layout (OBSE's
 		// GameObjects.h, widened to 64-bit) keeps EffectSetting* after six u32 of data and the script-effect pointer: +0x20.
 		// Read fault-guarded, and believed only when it is a live form of type MagicEffect.
+		int g_effectOffset = -1;   // where an EffectItem keeps its EffectSetting*, once found
+
 		RE::EffectSetting* FirstEffectRaw(RE::SpellItem* a_spell)
 		{
 			struct RawNode
@@ -361,9 +363,20 @@ namespace rows
 					if (!n->item) {
 						continue;
 					}
-					auto* setting = *reinterpret_cast<RE::EffectSetting* const*>(n->item + 0x20);
-					if (setting && reinterpret_cast<RE::TESForm*>(setting)->GetFormType() == RE::FormType::MagicEffect) {
-						return setting;
+					// the EffectSetting* field: OBSE's +0x20 read nothing in game (2026-09-30: "no effect read"), so the
+					// effect's first 0x60 bytes are searched for a pointer to a live MagicEffect form, and the offset kept
+					static int s_offset = -1;
+					for (int off = s_offset >= 0 ? s_offset : 0x08; off <= (s_offset >= 0 ? s_offset : 0x58); off += 8) {
+						const auto raw = *reinterpret_cast<const std::uintptr_t*>(n->item + off);
+						if (raw < 0x10000 || (raw & 7) != 0) continue;
+						auto* form = reinterpret_cast<RE::TESForm*>(raw);
+						if (form->GetFormType() == RE::FormType::MagicEffect) {
+							if (s_offset < 0) {
+								s_offset = off;
+								g_effectOffset = off;
+							}
+							return reinterpret_cast<RE::EffectSetting*>(form);
+						}
 					}
 					return nullptr;
 				}
@@ -385,6 +398,11 @@ namespace rows
 		if (!a_formID || g_spellIconFailed.contains(a_formID)) return nullptr;
 		auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(a_formID);
 		auto* effect = spell ? FirstEffectRaw(spell) : nullptr;
+		static bool offsetLogged = false;
+		if (!offsetLogged && g_effectOffset >= 0) {
+			offsetLogged = true;
+			logger::info("rows: a spell effect keeps its magic effect at +0x{:X}", g_effectOffset);
+		}
 		const char* icon = effect ? static_cast<RE::TESIcon*>(effect)->textureName.c_str() : nullptr;
 		const auto  path = icon && *icon ? IconAssetPath(icon) : std::string();
 		const std::wstring wpath(path.begin(), path.end());
