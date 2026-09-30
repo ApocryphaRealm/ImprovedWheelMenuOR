@@ -90,6 +90,32 @@ namespace ui
 
 	UE::UClass* Class(const wchar_t* a_path) { return UE::StaticFindObject<UE::UClass>(nullptr, nullptr, a_path); }
 
+	UE::UObject* Load(const wchar_t* a_path)
+	{
+		if (!a_path) return nullptr;
+		if (auto* o = UE::StaticFindObject<UE::UObject>(nullptr, nullptr, a_path)) return o;
+		static auto* lib = Class(L"/Script/Engine.KismetSystemLibrary");
+		auto*        cdo = lib ? lib->GetDefaultObject(false) : nullptr;
+		if (!cdo) return nullptr;
+		Call mk(cdo, L"MakeSoftObjectPath");
+		Call conv(cdo, L"Conv_SoftObjPathToSoftObjRef");
+		Call load(cdo, L"LoadAsset_Blocking");
+		void*      path = mk.At("PathString");
+		const auto pathSize = mk.Size("ReturnValue");
+		const auto refSize = conv.Size("ReturnValue");
+		if (!mk || !conv || !load || !path || pathSize <= 0 || refSize <= 0 || conv.Size("SoftObjectPath") != pathSize || load.Size("Asset") != refSize) {
+			return nullptr;
+		}
+		// the FString is built in place and never destroyed - a small, one-time leak per asset (as in Minimap Menu)
+		new (path) UE::FString(a_path);
+		mk.Run();
+		std::memcpy(conv.At("SoftObjectPath"), mk.At("ReturnValue"), static_cast<std::size_t>(pathSize));
+		conv.Run();
+		std::memcpy(load.At("Asset"), conv.At("ReturnValue"), static_cast<std::size_t>(refSize));
+		load.Run();
+		return load.Get<UE::UObject*>("ReturnValue");
+	}
+
 	UE::UObject* PlayerController()
 	{
 		static reflect::Handle cached;

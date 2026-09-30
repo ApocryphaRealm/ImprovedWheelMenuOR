@@ -21,6 +21,11 @@ namespace ammo
 		constexpr int    kBowType = 5;        // TESObjectWEAP data.type: 0-1 blade, 2-3 blunt, 4 staff, 5 bow
 		constexpr WORD   kDpad = XINPUT_GAMEPAD_DPAD_UP | XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_RIGHT;
 		constexpr const wchar_t* kFullNames = L"/Game/Localization/StringTables/ST_FullNames.ST_FullNames";
+		// the main wheel's own slot circle (a gold rim, a dark inside): the texture its material draws each slot with,
+		// found in the paks with uetex (/Game/Art/UI/Modern/HUD/QuickKeys/NewTextures) - the owner, 2026-09-30: "each arrow
+		// should have the same circle art as the main wheel for each arrow slot". The visible circle is 160 of its 256 px.
+		constexpr const wchar_t* kSlotCircle = L"/Game/Art/UI/Modern/HUD/QuickKeys/NewTextures/T_QuickKeys_SingleCircle_D.T_QuickKeys_SingleCircle_D";
+		constexpr double         kCircleShare = 160.0 / 256.0;
 
 		// ---- the widget (game thread; kept across frames as slot-checked handles) ----
 		reflect::Handle g_root, g_label;
@@ -183,18 +188,28 @@ namespace ammo
 					logger::warn("ammo: the wheel's round back could not be drawn (the brush fields were not found)");
 				}
 			}
-			// every entry: a circle, as the main wheel's slots (a dark disc with a light rim - the game's own slot art once it
-			// is known), and the arrows' picture on it
+			// every entry: the main wheel's own slot circle (a drawn disc with a light rim if the texture cannot be loaded),
+			// and the arrows' picture on it. The circle shows 0.2 R across, so eight entries on the arc never overlap.
+			auto* circle = ui::Load(kSlotCircle);
+			logger::info("ammo: the slot circle is {}", circle ? "the main wheel's own (T_QuickKeys_SingleCircle_D)" : "drawn (the game's texture could not be loaded)");
 			for (int i = 0; i < kSlots; ++i) {
 				g_ring[i] = g_ringSlot[i] = {};
 				UE::UObject* rs = nullptr;
 				if (auto* ring = ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoRing" + n + L"_" + std::to_wstring(i)).c_str(), &rs)) {
 					ui::Anchors(rs, 0, 0, 0, 0);
 					ui::Vec2(rs, L"SetAlignment", 0.5, 0.5);
-					ui::Vec2(rs, L"SetSize", R * 0.30, R * 0.30);
-					const float fill[4] = { 0.02f, 0.02f, 0.02f, 0.92f };
-					const float rim[4] = { 0.80f, 0.76f, 0.68f, 0.95f };
-					ui::RoundedBox(ring, true, fill, rim, 2.5f);
+					const double side = circle ? R * 0.20 / kCircleShare : R * 0.20;
+					ui::Vec2(rs, L"SetSize", side, side);
+					if (circle) {
+						ui::Call b(ring, L"SetBrushFromTexture");
+						b.Set("Texture", circle);
+						b.Set("bMatchSize", false);
+						b.Run();
+					} else {
+						const float fill[4] = { 0.02f, 0.02f, 0.02f, 0.92f };
+						const float rim[4] = { 0.80f, 0.76f, 0.68f, 0.95f };
+						ui::RoundedBox(ring, true, fill, rim, 2.5f);
+					}
 					ui::Vec2(ring, L"SetRenderTransformPivot", 0.5, 0.5);
 					ui::Visible(ring, false);
 					g_ring[i] = reflect::Hold(ring);
@@ -210,7 +225,7 @@ namespace ammo
 				}
 				ui::Anchors(s, 0, 0, 0, 0);
 				ui::Vec2(s, L"SetAlignment", 0.5, 0.5);
-				ui::Vec2(s, L"SetSize", R * 0.21, R * 0.21);
+				ui::Vec2(s, L"SetSize", R * 0.155, R * 0.155);   // the arrows inside the circle's rim
 				ui::Vec2(img, L"SetRenderTransformPivot", 0.5, 0.5);
 				ui::Visible(img, false);
 				g_icon[i] = reflect::Hold(img);
@@ -315,7 +330,7 @@ namespace ammo
 				if (auto* ring = reflect::Get(g_ring[i])) {
 					const bool on = i == g_pointed;
 					ui::Vec2(ring, L"SetRenderScale", on ? 1.2 : 1.0, on ? 1.2 : 1.0);
-					ui::Colour(ring, on ? 1.0f : 0.85f, on ? 0.86f : 0.85f, on ? 0.55f : 0.85f, 1.0f);   // the pointed one's rim warms
+					ui::Colour(ring, on ? 1.0f : 0.8f, on ? 0.92f : 0.8f, on ? 0.7f : 0.8f, 1.0f);   // the pointed one brighter and warmer
 				}
 			}
 			for (int i = 0; i < kSlots; ++i) {

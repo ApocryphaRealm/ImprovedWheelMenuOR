@@ -12,9 +12,11 @@ in `git log`. A version number is issued by the version gate only once a build i
   the main wheel for each arrow slot").
   - One entry per favourited arrow type, centred on the middle of the half circle and 22.5 degrees apart, closer only
     when the entries would reach the screen's edge.
-  - Every entry sits on its own circle, which grows and warms when pointed. The circle is a drawn dark disc with a light
-    rim until the main wheel's own slot art is identified; the primary session's ue.tree dump of the wheel was asked
-    for.
+  - Every entry sits on the main wheel's own slot circle, which grows and warms when pointed. The primary session's
+    ue.tree showed the HUD wheel is ONE image drawn by the material MIC_UI_QuickKeys. The circle it draws each slot
+    with, T_QuickKeys_SingleCircle_D (a gold rim, a dark translucent inside), was found in the paks with uetex and is
+    loaded by path (KismetSystemLibrary's LoadAsset_Blocking, Minimap Menu's loader). If it can't be loaded, a drawn
+    disc stands in. The circles show 0.2 R across, so eight entries never overlap.
   - The right stick picks the nearest entry, and D-pad up / down step through the entries.
 - **Fixed: the magic menu showed the inventory wheel's pictures** (the owner: "I still don't see the magic wheel in the
   magic inventory" - "the magic menu wheel is a distinct separate wheel from the inventory wheel. And just like the

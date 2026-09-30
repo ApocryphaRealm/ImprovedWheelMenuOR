@@ -16,6 +16,7 @@ namespace ui
 		Call(UE::UObject* a_obj, const wchar_t* a_fn);
 		explicit operator bool() const { return m_fn != nullptr; }
 		void* At(std::string_view a_name);
+		std::int32_t Size(std::string_view a_name) const { return m_fn ? SizeOf(reinterpret_cast<UE::UStruct*>(m_fn), a_name) : -1; }
 		template <class T>
 		bool Set(std::string_view a_name, const T& a_value)
 		{
@@ -47,6 +48,9 @@ namespace ui
 	void Colour(UE::UObject* a_image, float a_r, float a_g, float a_b, float a_a);
 
 	UE::UClass*  Class(const wchar_t* a_path);
+	// an asset by its object path ("/Game/X/Y.Y"): the loaded one, else loaded now through KismetSystemLibrary
+	// (MakeSoftObjectPath -> Conv_SoftObjPathToSoftObjRef -> LoadAsset_Blocking, all reflected - Minimap Menu's ue::Load)
+	UE::UObject* Load(const wchar_t* a_path);
 	UE::UObject* PlayerController();                         // a slot-checked handle, looked for at most every 2 s
 	UE::UObject* CreateWidget(const wchar_t* a_classPath);   // WidgetBlueprintLibrary::Create, owned by the player controller
 
