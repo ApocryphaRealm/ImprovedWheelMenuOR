@@ -34,6 +34,11 @@ namespace rows
 	std::uint32_t             InventoryRowForm(UE::UObject* a_row);
 	bool                      TakeInventoryRowsChanged();
 	UE::UClass*               InventoryRowClass();
+	// the same for the magic menu's rows (their spell: the player's spell of the row's name)
+	std::vector<UE::UObject*> LiveMagicRows();
+	std::string               MagicRowKey(UE::UObject* a_row);
+	std::uint32_t             MagicRowSpell(UE::UObject* a_row);
+	bool                      TakeMagicRowsChanged();
 
 	std::string Status();                   // for the self-check
 }

@@ -622,6 +622,26 @@ namespace wheels
 		ToggleFavourite(IsAmmo(a_formID) ? kAmmo : kEquip, a_formID);   // arrows go to the Ammo wheel, as Y
 	}
 
+	std::unordered_set<std::uint32_t> MagicFavourites()
+	{
+		std::unordered_set<std::uint32_t> out;
+		if (!EnsureLoaded()) {
+			return out;
+		}
+		for (const Slot& slot : g_wheels[kMagic]) {
+			out.insert(slot.entries.begin(), slot.entries.end());
+		}
+		return out;
+	}
+
+	void ToggleSpell(std::uint32_t a_formID)
+	{
+		if (!a_formID || !EnsureLoaded()) {
+			return;
+		}
+		ToggleFavourite(kMagic, a_formID);
+	}
+
 	std::array<std::uint32_t, 8> MagicSlots()
 	{
 		std::array<std::uint32_t, 8> out{};

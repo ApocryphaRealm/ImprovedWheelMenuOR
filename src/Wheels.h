@@ -40,6 +40,8 @@ namespace wheels
 	std::unordered_set<std::uint32_t> Favourites();
 	std::uint32_t Generation();
 	void ToggleItem(std::uint32_t a_formID);   // the star in the inventory's favourites column: as Y on that item
+	std::unordered_set<std::uint32_t> MagicFavourites();   // every spell on the Magic wheel
+	void ToggleSpell(std::uint32_t a_formID);  // the star in the magic menu's favourites column: as Y on that spell
 
 	// the Magic wheel's eight slots (key order): each slot's active spell, 0 = empty (MagicWheel.cpp draws them)
 	std::array<std::uint32_t, 8> MagicSlots();

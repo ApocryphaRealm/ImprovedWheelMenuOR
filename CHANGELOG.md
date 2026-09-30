@@ -6,6 +6,10 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Added: the favourites column in the magic menu** (the owner: "we need to add a star for favorites on the column in
+  the magic menu"). Every magic row gets the same star at the end of its Magic_entry_horizontal: filled white while the
+  spell is on the Magic wheel, and a click puts it on or takes it off the Magic wheel as Y does. The inventory column
+  and this one share one module (Favourites.cpp); the owner confirmed the inventory's works and is interactive.
 - **Fixed: items favourited back onto the inventory wheel stayed invisible** (the owner: after he "deselected the weapons
   from the wheel and tried favoriting them back, they didn't appear in the wheel menu"). The game keeps a slot's old
   picture after an item leaves its key, and a key with a picture and no item was read as a spell and its picture's

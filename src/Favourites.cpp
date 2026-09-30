@@ -26,6 +26,7 @@ namespace favourites
 			std::string     key;            // what the row's name read when its item was last looked up
 			std::uint32_t   form = 0;
 			int             shown = -1;     // the fill as drawn: 1 favourite, 0 not, -1 not drawn yet
+			bool            magic = false;  // a magic menu row (its star is the Magic wheel's)
 		};
 		std::unordered_map<UE::UObject*, Column> g_columns;   // by row; resolved through its slot before use
 
@@ -36,6 +37,7 @@ namespace favourites
 		int             g_built = 0, g_clicks = 0;
 		bool            g_watching = false;
 		std::string     g_status = "the inventory has not been open yet";
+		menus::Menu     g_lastMenu = menus::Menu::kNone;
 
 		// ours, from the plugin folder: a texture the engine imports from the PNG (KismetRenderingLibrary)
 		UE::UObject* FillTexture()
@@ -113,16 +115,15 @@ namespace favourites
 		void OnButton(UE::UObject* a_obj, UE::UFunction* a_fn, void*);
 
 		// the column, added once to a row
-		bool Build(UE::UObject* a_row, Column& a_col)
+		bool Build(UE::UObject* a_row, Column& a_col, const char* a_horizontal)
 		{
 			static auto* overlayClass = ui::Class(L"/Script/UMG.Overlay");
-			auto* horizontal = Prop(a_row, "inv_entry_horizontal");
-			if (!horizontal) horizontal = ui::ChildNamed(a_row, L"inv_entry_horizontal");
-			if (!horizontal) horizontal = ui::FindInTree(a_row, "inv_entry_horizontal");
+			auto* horizontal = Prop(a_row, a_horizontal);
+			if (!horizontal) horizontal = ui::FindInTree(a_row, a_horizontal);
 			auto* tree = Prop(a_row, "WidgetTree");
 			if (!overlayClass || !horizontal || !tree) {
 				static bool logged = false;
-				if (!logged) logger::warn("favourites: a row has no {} - no column", !horizontal ? "inv_entry_horizontal" : "widget tree");
+				if (!logged) logger::warn("favourites: a row has no {} - no column", !horizontal ? a_horizontal : "widget tree");
 				if (!logged && !horizontal) logger::warn("favourites: the row's tree root is {}", tree ? pe::Utf8(tree->GetFName().ToString()) : std::string("none"));
 				logged = true;
 				return false;
@@ -177,14 +178,19 @@ namespace favourites
 			for (auto& [row, col] : g_columns) {
 				if (reflect::Get(col.button) != a_obj) continue;
 				auto* live = reflect::Get(row, col.rowSlot);
-				const auto form = live ? rows::InventoryRowForm(live) : 0;
+				const auto form = !live ? 0 : col.magic ? rows::MagicRowSpell(live) : rows::InventoryRowForm(live);
 				if (!form) {
-					logger::info("favourites: a star was clicked on a row with no item");
+					logger::info("favourites: a star was clicked on a row with no {}", col.magic ? "spell of the player's" : "item");
 					return;
 				}
 				++g_clicks;
-				logger::info("favourites: star clicked on {}", inventory::NameOf(form));
-				wheels::ToggleItem(form);
+				if (col.magic) {
+					logger::info("favourites: star clicked on the spell {}", rows::SpellName(form));
+					wheels::ToggleSpell(form);
+				} else {
+					logger::info("favourites: star clicked on {}", inventory::NameOf(form));
+					wheels::ToggleItem(form);
+				}
 				g_next = 0;   // redrawn at once
 				return;
 			}
@@ -193,29 +199,39 @@ namespace favourites
 
 	void Tick()
 	{
-		if (menus::Active() != menus::Menu::kInventory) return;
+		// the inventory's rows (items: the Equipment and Ammo wheels) and the magic menu's (spells: the Magic wheel) - the
+		// owner, 2026-09-30: "we need to add a star for favorites on the column in the magic menu"
+		const auto menu = menus::Active();
+		const bool magic = menu == menus::Menu::kMagic;
+		if (menu != menus::Menu::kInventory && !magic) {
+			g_lastMenu = menu;
+			return;
+		}
 		const ULONGLONG now = GetTickCount64();
 		if (now < g_next) return;
 		g_next = now + 100;
-		const bool rowsChanged = rows::TakeInventoryRowsChanged();
+		const bool menuChanged = menu != g_lastMenu;
+		g_lastMenu = menu;
+		const bool rowsChanged = magic ? rows::TakeMagicRowsChanged() : rows::TakeInventoryRowsChanged();
 		const auto generation = wheels::Generation();
-		if (!rowsChanged && generation == g_drawnGeneration) return;   // nothing moved: nothing to do
+		if (!menuChanged && !rowsChanged && generation == g_drawnGeneration) return;   // nothing moved: nothing to do
 		g_drawnGeneration = generation;
 
-		const auto live = rows::LiveInventoryRows();
-		const auto favs = wheels::Favourites();
+		const auto live = magic ? rows::LiveMagicRows() : rows::LiveInventoryRows();
+		const auto favs = magic ? wheels::MagicFavourites() : wheels::Favourites();
 		int drawn = 0, built = 0;
 		for (auto* row : live) {
 			Column& col = g_columns[row];
 			if (col.rowSlot != row->internalIndex || !reflect::Get(col.overlay)) {
 				col = {};
-				if (!Build(row, col)) continue;
+				col.magic = magic;
+				if (!Build(row, col, magic ? "Magic_entry_horizontal" : "inv_entry_horizontal")) continue;
 				++built;
 			}
-			const std::string key = rows::InventoryRowKey(row);
-			if (key != col.key) {   // the row shows another item now
+			const std::string key = magic ? rows::MagicRowKey(row) : rows::InventoryRowKey(row);
+			if (key != col.key) {   // the row shows another item or spell now
 				col.key = key;
-				col.form = rows::InventoryRowForm(row);
+				col.form = magic ? rows::MagicRowSpell(row) : rows::InventoryRowForm(row);
 				col.shown = -1;
 			}
 			const int fav = col.form && favs.contains(col.form) ? 1 : 0;
@@ -230,7 +246,8 @@ namespace favourites
 			it = reflect::Get(it->first, it->second.rowSlot) ? std::next(it) : g_columns.erase(it);
 		}
 		if (built || drawn) {
-			g_status = std::format("{} rows with a column ({} built now), {} stars redrawn, {} clicks so far", g_columns.size(), built, drawn, g_clicks);
+			g_status = std::format("{} rows with a column ({} built now in the {}), {} stars redrawn, {} clicks so far", g_columns.size(), built,
+				magic ? "magic menu" : "inventory", drawn, g_clicks);
 			logger::debug("favourites: {}", g_status);
 		}
 	}
