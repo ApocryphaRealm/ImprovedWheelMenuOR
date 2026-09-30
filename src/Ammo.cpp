@@ -31,6 +31,59 @@ namespace ammo
 		reflect::Handle g_root, g_label;
 		std::array<reflect::Handle, kSlots> g_icon, g_iconSlot, g_ring, g_ringSlot;   // each entry: its circle, its arrows on it
 		int       g_layoutCount = -1;   // the entry count the positions were last laid out for
+
+		// The game's own wheel, sliced in half (the owner, 2026-09-30: "the arrows icons and slot outline is too small ... the
+		// highlighting effect is too dim ... basically just a carbon copy of the game's wheel menu just sliced in half"). The
+		// HUD wheel is ONE image drawn by a dynamic instance of MIC_UI_QuickKeys (634 across; parameters ID1..ID8Texture,
+		// ID1..ID8_Opacity, SelectorRotator, SelectorArrowAlpha - the primary session's reads). A second instance on an image,
+		// clipped just past the wheel's middle, keeps the left five slots whole: 1 at the top, 8, 7 at the left, 6, 5 at the
+		// bottom (slot n sits 45 * (n - 1) degrees clockwise from the top). The arrows go into those slots' textures, the
+		// game's own selector points at the chosen one. The drawn circles below stay as the fallback.
+		constexpr const wchar_t* kWheelMic = L"/Game/UI/Materials/QuickKeys/MIC_UI_QuickKeys.MIC_UI_QuickKeys";
+		constexpr double         kOverhang = 0.14;   // past the middle, in wheel radii: the top and bottom slots stay whole
+		constexpr int            kHalfSlots = 5;
+		reflect::Handle          g_mid;
+		bool                     g_material = false;
+		std::array<int, kSlots>  g_entryId{};            // the wheel slot (1-8) each entry sits in
+		std::array<UE::UObject*, 9> g_midTex{};          // the texture last set in each slot (1-8)
+		std::array<float, 9>        g_midOpacity{};
+		int                         g_midPointed = -2;
+
+		// entries fill the half from its middle: one at 7, two at 8 / 6, then out to 1 and 5
+		std::array<int, kHalfSlots> HalfSlots(int a_n)
+		{
+			switch (a_n) {
+			case 1: return { 7, 0, 0, 0, 0 };
+			case 2: return { 8, 6, 0, 0, 0 };
+			case 3: return { 8, 7, 6, 0, 0 };
+			case 4: return { 1, 8, 6, 5, 0 };
+			default: return { 1, 8, 7, 6, 5 };
+			}
+		}
+
+		// slot n's direction as a math angle (0 right, 90 up, counter-clockwise)
+		double SlotMathAngle(int a_slot)
+		{
+			double a = 90.0 - 45.0 * (a_slot - 1);
+			while (a < 0.0) a += 360.0;
+			return a;
+		}
+
+		void MidScalar(UE::UObject* a_mid, const wchar_t* a_name, float a_v)
+		{
+			ui::Call c(a_mid, L"SetScalarParameterValue");
+			c.Set("ParameterName", UE::FName(a_name, UE::EFindName::Add));
+			c.Set("Value", a_v);
+			c.Run();
+		}
+
+		void MidTexture(UE::UObject* a_mid, const wchar_t* a_name, UE::UObject* a_tex)
+		{
+			ui::Call c(a_mid, L"SetTextureParameterValue");
+			c.Set("ParameterName", UE::FName(a_name, UE::EFindName::Add));
+			c.Set("Value", a_tex);
+			c.Run();
+		}
 		std::array<std::uint32_t, kSlots>   g_shownIds{};
 		int       g_builds = 0;
 		ULONGLONG g_lastBuild = 0;
@@ -93,7 +146,7 @@ namespace ammo
 			return bow;
 		}
 
-		double Radius() { return 230.0 * settings::Get().ammoScalePercent / 100.0; }
+		double Radius() { return 317.0 * settings::Get().ammoScalePercent / 100.0; }   // half of the HUD wheel's 634
 
 		// The entries, as in the Skyrim Perfected Wheeler's ammo wheel (the owner, 2026-09-30: "if you only have one arrow
 		// ... favorited to it, then it centers to the middle of the semicircle and for every additional favorited arrow type
@@ -122,6 +175,15 @@ namespace ammo
 		void Layout(int a_n)
 		{
 			if (a_n == g_layoutCount) return;
+			if (g_material) {
+				const auto slots = HalfSlots(a_n);
+				g_entryId.fill(0);
+				for (int i = 0; i < a_n && i < kHalfSlots; ++i) g_entryId[static_cast<std::size_t>(i)] = slots[static_cast<std::size_t>(i)];
+				g_layoutCount = a_n;
+				g_shownIds = {};
+				g_midPointed = -2;
+				return;
+			}
 			for (int i = 0; i < kSlots; ++i) {
 				const bool on = i < a_n;
 				if (on) {
@@ -180,8 +242,39 @@ namespace ammo
 			const std::uint8_t clip = 1;   // EWidgetClipping::ClipToBounds: the round back shows its left half - the semi-circle
 			ui::CallFirst(panel, L"SetClipping", &clip, sizeof(clip));
 
+			// the game's own wheel, when its material can be instanced
+			g_material = false;
+			g_mid = {};
+			g_midTex = {};
+			g_midOpacity.fill(-1.0f);
+			g_midPointed = -2;
+			if (auto* mic = ui::Load(kWheelMic)) {
+				static auto* mlib = ui::Class(L"/Script/Engine.KismetMaterialLibrary");
+				ui::Call c(mlib ? mlib->GetDefaultObject(false) : nullptr, L"CreateDynamicMaterialInstance");
+				c.Set("WorldContextObject", ui::PlayerController());
+				c.Set("Parent", mic);
+				auto* mid = c.RunGuarded() ? c.Get<UE::UObject*>("ReturnValue") : nullptr;
+				UE::UObject* ws = nullptr;
+				auto* wheelImg = mid ? ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoWheel" + n).c_str(), &ws) : nullptr;
+				if (wheelImg && ws) {
+					ui::Vec2(panelSlot, L"SetSize", R * (1.0 + kOverhang), 2.0 * R);
+					ui::Anchors(ws, 0, 0, 0, 0);
+					ui::Vec2(ws, L"SetPosition", 0.0, 0.0);
+					ui::Vec2(ws, L"SetSize", 2.0 * R, 2.0 * R);
+					ui::Call b(wheelImg, L"SetBrushFromMaterial");
+					b.Set("Material", mid);
+					b.Run();
+					for (int k = 1; k <= 8; ++k) MidScalar(mid, (L"ID" + std::to_wstring(k) + L"_Opacity").c_str(), 0.0f);
+					MidScalar(mid, L"SelectorArrowAlpha", 0.0f);
+					g_mid = reflect::Hold(mid);
+					g_material = true;
+				}
+			}
+			logger::info("ammo: the wheel is {}", g_material ? "the game's own (MIC_UI_QuickKeys), its left half" : "drawn (the game's wheel material could not be instanced)");
+			const double panelW = g_material ? R * (1.0 + kOverhang) : R;
+
 			UE::UObject* backSlot = nullptr;
-			if (auto* back = ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoBack" + n).c_str(), &backSlot)) {
+			if (auto* back = g_material ? nullptr : ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoBack" + n).c_str(), &backSlot)) {
 				ui::Anchors(backSlot, 0, 0, 0, 0);
 				ui::Vec2(backSlot, L"SetPosition", 0.0, 0.0);
 				ui::Vec2(backSlot, L"SetSize", 2.0 * R, 2.0 * R);
@@ -198,7 +291,7 @@ namespace ammo
 			for (int i = 0; i < kSlots; ++i) {
 				g_ring[i] = g_ringSlot[i] = {};
 				UE::UObject* rs = nullptr;
-				if (auto* ring = ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoRing" + n + L"_" + std::to_wstring(i)).c_str(), &rs)) {
+				if (auto* ring = g_material ? nullptr : ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoRing" + n + L"_" + std::to_wstring(i)).c_str(), &rs)) {
 					ui::Anchors(rs, 0, 0, 0, 0);
 					ui::Vec2(rs, L"SetAlignment", 0.5, 0.5);
 					const double side = circle ? R * 0.20 / kCircleShare : R * 0.20;
@@ -222,7 +315,7 @@ namespace ammo
 			for (int i = 0; i < kSlots; ++i) {
 				g_icon[i] = g_iconSlot[i] = {};
 				UE::UObject* s = nullptr;
-				auto* img = ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoIcon" + n + L"_" + std::to_wstring(i)).c_str(), &s);
+				auto* img = g_material ? nullptr : ui::AddToCanvas(panel, L"/Script/UMG.Image", (L"IwmAmmoIcon" + n + L"_" + std::to_wstring(i)).c_str(), &s);
 				if (!img) {
 					continue;
 				}
@@ -242,7 +335,7 @@ namespace ammo
 			if (label) {
 				ui::Anchors(labelSlot, 1.0, 0.5, 1.0, 0.5);
 				ui::Vec2(labelSlot, L"SetAlignment", 1.0, 0.5);
-				ui::Vec2(labelSlot, L"SetPosition", -R - 12.0, 0.0);
+				ui::Vec2(labelSlot, L"SetPosition", -panelW - 12.0, 0.0);
 				const bool yes = true;
 				ui::CallFirst(labelSlot, L"SetAutoSize", &yes, sizeof(yes));
 			} else {
@@ -306,8 +399,50 @@ namespace ammo
 			White(label);
 		}
 
+		void DrawMaterial()
+		{
+			auto* mid = reflect::Get(g_mid);
+			if (!mid) return;
+			std::array<UE::UObject*, 9> tex{};
+			for (int i = 0; i < g_count && i < kHalfSlots; ++i) {
+				const int slot = g_entryId[static_cast<std::size_t>(i)];
+				if (slot >= 1 && slot <= 8 && g_ids[i]) {
+					tex[static_cast<std::size_t>(slot)] = rows::ItemIcon(g_ids[i]);
+					if (!tex[static_cast<std::size_t>(slot)] && g_ids[i] != g_shownIds[i]) {
+						logger::info("ammo: no picture for {} yet - one shows once an inventory row has shown it this session", inventory::NameOf(g_ids[i]));
+					}
+				}
+			}
+			g_shownIds = g_ids;
+			for (int k = 1; k <= 8; ++k) {
+				auto* t = tex[static_cast<std::size_t>(k)];
+				if (t && t != g_midTex[static_cast<std::size_t>(k)]) {
+					MidTexture(mid, (L"ID" + std::to_wstring(k) + L"Texture").c_str(), t);
+					g_midTex[static_cast<std::size_t>(k)] = t;
+				}
+				const float op = t ? 1.0f : 0.0f;
+				if (op != g_midOpacity[static_cast<std::size_t>(k)]) {
+					MidScalar(mid, (L"ID" + std::to_wstring(k) + L"_Opacity").c_str(), op);
+					g_midOpacity[static_cast<std::size_t>(k)] = op;
+				}
+			}
+			if (g_pointed != g_midPointed) {
+				// the game's own selector: SelectorRotator is a fraction of a turn clockwise from the top (slot n = (n-1)/8)
+				const int slot = g_pointed >= 0 && g_pointed < kHalfSlots ? g_entryId[static_cast<std::size_t>(g_pointed)] : 0;
+				if (slot >= 1) MidScalar(mid, L"SelectorRotator", static_cast<float>(slot - 1) / 8.0f);
+				MidScalar(mid, L"SelectorArrowAlpha", slot >= 1 ? 1.0f : 0.0f);
+				g_midPointed = g_pointed;
+			}
+			SetLabel(g_pointed >= 0 && g_ids[g_pointed] ? inventory::NameOf(g_ids[g_pointed]) : std::string(" "));
+			g_drawnPointed = g_pointed;
+		}
+
 		void Draw()
 		{
+			if (g_material) {
+				DrawMaterial();
+				return;
+			}
 			for (int i = 0; i < kSlots; ++i) {
 				auto* img = reflect::Get(g_icon[i]);
 				if (!img || g_ids[i] == g_shownIds[i]) {
@@ -431,7 +566,8 @@ namespace ammo
 			int    i = -1;
 			double best = 1e9;
 			for (int k = 0; k < g_count; ++k) {   // the entry whose angle is nearest
-				const double d = std::abs(th - EntryAngle(k, g_count));
+				const double ang = g_material ? SlotMathAngle(g_entryId[static_cast<std::size_t>(k)]) : EntryAngle(k, g_count);
+				const double d = std::abs(th - ang);
 				if (d < best) {
 					best = d;
 					i = k;
@@ -463,7 +599,7 @@ namespace ammo
 			g_ids = {};
 			g_count = 0;
 			for (const auto id : wheels::AmmoSlots()) {
-				if (id && g_count < kSlots) g_ids[static_cast<std::size_t>(g_count++)] = id;
+				if (id && g_count < (g_material ? kHalfSlots : kSlots)) g_ids[static_cast<std::size_t>(g_count++)] = id;   // the half wheel holds five
 			}
 			g_worn = worn;
 			const int filled = g_count;

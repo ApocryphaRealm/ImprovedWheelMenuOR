@@ -6,6 +6,16 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Changed: the ammo wheel is the game's own wheel, sliced in half** (the owner: "the arrows icons and slot outline is
+  too small for my liking and the highlighting effect is too dim ... basically just a carbon copy of the game's wheel
+  menu just sliced in half").
+  - The HUD wheel is one image drawn by a dynamic instance of MIC_UI_QuickKeys (the primary session's reads). The ammo
+    wheel is a second instance of it, 634 across like the HUD's, clipped just past its middle, so the left five slots
+    stay whole: 1 at the top, 8, 7 at the left, 6, 5 at the bottom.
+  - The arrows go into those slots' ID textures, and the game's own selector (SelectorRotator, SelectorArrowAlpha)
+    points at the chosen one.
+  - Entries fill from the middle: one at 7, two at 8 and 6, up to five arrow types.
+  - The drawn circles remain as the fallback if the material can't be instanced.
 - **Added: the wheel's name over the wheel on screen**: "Inventory Wheel" or "Magic Wheel" over the HUD radial (the
   active wheel) and over the inventory's and the magic menu's assign panels (the owner: "The wheel menus aren't named in
   the inventory when they should be").
