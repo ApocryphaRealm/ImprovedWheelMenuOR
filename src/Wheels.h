@@ -35,6 +35,9 @@ namespace wheels
 	void Favourite(menus::Menu a_menu);        // Y in the inventory / magic menu: the highlighted item or spell on/off its wheel
 	bool IsFavourite(std::uint32_t a_formID);  // on the Equipment or Ammo wheel - such an item cannot be dropped, sold or handed over
 
+	// the Magic wheel's eight slots (key order): each slot's active spell, 0 = empty (MagicWheel.cpp draws them)
+	std::array<std::uint32_t, 8> MagicSlots();
+
 	// the Ammo wheel's eight slots, the top one first: the arrows the player carries (0 = empty, or not carried)
 	std::array<std::uint32_t, 8> AmmoSlots();
 	void AssignPressed(menus::Menu a_menu, int a_slot);   // A with a menu's panel showing (a_slot = pointed key, -1 none)

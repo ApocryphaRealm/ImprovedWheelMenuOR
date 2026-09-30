@@ -256,3 +256,96 @@ namespace ui
 		return CallFirst(a_image, L"SetBrush", copy.data(), copy.size());
 	}
 }
+
+namespace ui
+{
+	UE::UObject* ChildNamed(UE::UObject* a_userWidget, const wchar_t* a_name)
+	{
+		if (!a_userWidget || !a_name) return nullptr;
+		Call c(a_userWidget, L"GetWidgetFromName");
+		if (!c) return nullptr;
+		c.Set("Name", UE::FName(a_name, UE::EFindName::Find));
+		return c.Run() ? c.Get<UE::UObject*>("ReturnValue") : nullptr;
+	}
+
+	UE::UObject* BrushResource(UE::UObject* a_image)
+	{
+		static auto* brushStruct = reinterpret_cast<UE::UStruct*>(UE::StaticFindObject<UE::UObject>(nullptr, nullptr, L"/Script/SlateCore.SlateBrush"));
+		if (!a_image || !brushStruct || !reflect::Ok()) return nullptr;
+		const auto brushOff = reflect::Offset(reinterpret_cast<UE::UStruct*>(a_image->GetClass()), "Brush");
+		const auto resOff = reflect::Offset(brushStruct, "ResourceObject");
+		if (brushOff < 0 || resOff < 0) return nullptr;
+		return *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(a_image) + brushOff + resOff);
+	}
+
+	float RenderOpacity(UE::UObject* a_widget)
+	{
+		static auto* widget = Class(L"/Script/UMG.Widget");
+		const auto off = widget && a_widget && reflect::Ok() ? reflect::Offset(reinterpret_cast<UE::UStruct*>(widget), "RenderOpacity") : -1;
+		return off >= 0 ? *reinterpret_cast<const float*>(reinterpret_cast<const std::uint8_t*>(a_widget) + off) : 1.0f;
+	}
+
+	bool Measure(UE::UObject* a_w, double& a_x, double& a_y, double& a_width, double& a_height)
+	{
+		auto* pc = PlayerController();
+		static auto* lib = Class(L"/Script/UMG.SlateBlueprintLibrary");
+		auto* cdo = lib ? lib->GetDefaultObject(false) : nullptr;
+		if (!a_w || !pc || !cdo) return false;
+		Call geo(a_w, L"GetCachedGeometry");
+		const auto gsize = geo.Size("ReturnValue");
+		if (!geo || gsize <= 0 || !geo.Run()) return false;
+		Call size(cdo, L"GetLocalSize");
+		void* g = size.At("Geometry");
+		if (!size || !g || size.Size("Geometry") != gsize) return false;
+		std::memcpy(g, geo.At("ReturnValue"), static_cast<std::size_t>(gsize));
+		size.Run();
+		const auto local = size.Get<std::array<double, 2>>("ReturnValue");
+		const auto toViewport = [&](double a_lx, double a_ly, double& a_vx, double& a_vy) {
+			Call c(cdo, L"LocalToViewport");
+			void* gg = c.At("Geometry");
+			if (!c || !gg || c.Size("Geometry") != gsize) return false;
+			c.Set("WorldContextObject", pc);
+			std::memcpy(gg, geo.At("ReturnValue"), static_cast<std::size_t>(gsize));
+			const double lc[2] = { a_lx, a_ly };
+			c.Set("LocalCoordinate", lc);
+			if (!c.RunGuarded()) return false;   // a world-context call: fault-guarded (a quit, a load)
+			const auto vpos = c.Get<std::array<double, 2>>("ViewportPosition");
+			a_vx = vpos[0];
+			a_vy = vpos[1];
+			return true;
+		};
+		double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+		if (!toViewport(0.0, 0.0, x0, y0) || !toViewport(local[0], local[1], x1, y1)) return false;
+		a_x = x0;
+		a_y = y0;
+		a_width = x1 - x0;
+		a_height = y1 - y0;
+		return local[0] > 0.0 && a_width > 1.0 && a_height > 1.0;
+	}
+
+	float MidScalar(UE::UObject* a_mid, const wchar_t* a_name)
+	{
+		Call c(a_mid, L"K2_GetScalarParameterValue");
+		if (!c) return 0.0f;
+		c.Set("ParameterName", UE::FName(a_name, UE::EFindName::Add));
+		return c.Run() ? c.Get<float>("ReturnValue") : 0.0f;
+	}
+
+	void SetMidScalar(UE::UObject* a_mid, const wchar_t* a_name, float a_v)
+	{
+		Call c(a_mid, L"SetScalarParameterValue");
+		if (!c) return;
+		c.Set("ParameterName", UE::FName(a_name, UE::EFindName::Add));
+		c.Set("Value", a_v);
+		c.Run();
+	}
+
+	void SetMidTexture(UE::UObject* a_mid, const wchar_t* a_name, UE::UObject* a_texture)
+	{
+		Call c(a_mid, L"SetTextureParameterValue");
+		if (!c) return;
+		c.Set("ParameterName", UE::FName(a_name, UE::EFindName::Add));
+		c.Set("Value", a_texture);
+		c.Run();
+	}
+}

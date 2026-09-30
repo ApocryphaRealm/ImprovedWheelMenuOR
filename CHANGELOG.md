@@ -6,6 +6,21 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Changed: the Magic wheel is a wheel of its own** (the owner: "creating a second wheel, not just a renamed wheel, a
+  second entirely different wheel, similar to how we created the ammo wheel. And this one needs to be specific to the
+  magic inventory menu. Because when I go to inventory and magic, I still see all the same items. And only on the
+  magic wheel do I hear a bunch of ticking noises as soon as it appears"). MagicWheel.cpp: its own image with its own
+  instance of the game's wheel material (of the same parent as the game's), laid exactly over the game's wheel picture
+  (quickKeys_material > Image, measured every 100 ms) while the Magic wheel is up - the magic menu's panel, or the HUD
+  radial with Magic active - with the game's picture hidden under it (its opacity put back after). Its eight slots are
+  the Magic wheel's spells, empty ones drawn empty; every scalar of the game's instance but the slots' own is copied
+  onto ours, so the selector and its animation follow the game's exactly. Nothing is written into the game's view model
+  any more - the old SetIcons redrew slots, and every redrawn slot ticked.
+- **Changed: no magic on the inventory wheel** (the owner: "the inventory wheel menu still having magic on it"). A game
+  key with a picture and no item - a spell the game kept from before - is drawn empty on the game's wheel (its slot's
+  opacity on the game's own instance, set again whenever the game redraws), and closing the radial on it uses nothing.
+- Spell pictures also come from the spell's first effect's own icon (TESIcon, the same path rule as items), so the
+  Magic wheel has pictures before the magic menu has shown its rows.
 - **Fixed: the ammo wheel showed the material's defaults** (the owner: no arrows, and "box number eight is highlighted
   permanently, and it doesn't respond to my right stick movement"). The primary's read with the wheel open found no
   instance of ours - only the HUD's two - so every parameter written went nowhere. Each open now asks the wheel's image

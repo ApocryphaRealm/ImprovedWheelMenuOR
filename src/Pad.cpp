@@ -3,6 +3,7 @@
 #include "Ammo.h"
 #include "WheelName.h"
 #include "Inventory.h"
+#include "MagicWheel.h"
 #include "Menus.h"
 #include "QuickKeys.h"
 #include "Rows.h"
@@ -166,6 +167,16 @@ namespace pad
 			wheels::UseMagic(a_slot);
 		}
 
+		// the HUD radial is closing on a slot of the inventory wheel whose game key holds a spell: that slot is drawn empty
+		// (MagicWheel.cpp), so it uses nothing - spells are the Magic wheel's
+		void CloseOnEquipment(int a_slot)
+		{
+			if (magicwheel::IsSpellKey(a_slot)) {
+				quickkeys::CancelChoice();
+				logger::info("pad: the inventory wheel closed on slot {}, whose game key holds a spell - nothing used", a_slot + 1);
+			}
+		}
+
 		// The Apocrypha Menu Framework's window is open (AMF_IsMenuOpen, AMF OR 1.0.5+). This read comes before the
 		// framework's own pad gate hides the buttons from the game, so without this the D-pad still opened the wheels
 		// with the framework's window up (the owner, 2026-09-30: treat it like the game's own wheel, which never opens
@@ -236,6 +247,7 @@ namespace pad
 
 			// the ammo wheel (a bow held, its button in gameplay): while it is open it takes the read (Ammo.cpp)
 			wheelname::Tick();   // "Inventory Wheel" / "Magic Wheel" over the wheel on screen
+			magicwheel::Tick();  // the Magic wheel's own widget over the game's wheel; no spells on the inventory wheel
 			const bool ammoTook = ammo::Rewrite(a_pad, raw, pressed, out, menu == menus::Menu::kNone && !menus::AnyOpen(), quickkeys::RadialOpen());
 
 			if (ammoTook) {
@@ -327,6 +339,8 @@ namespace pad
 						g_suppressDown = true;   // the game sees the button go up: the wheel closes on the pointed slot
 						if (wheels::Active() == wheels::Wheel::kMagic && quickkeys::RadialOpen()) {
 							CloseOnMagic(PointedKey());
+						} else if (quickkeys::RadialOpen()) {
+							CloseOnEquipment(PointedKey());
 						}
 					} else {
 						g_gameDownAt = now;
@@ -340,6 +354,8 @@ namespace pad
 						logger::info("pad: wheel button tapped - the wheel stays open until the next press");
 					} else if (wheels::Active() == wheels::Wheel::kMagic && quickkeys::RadialOpen()) {
 						CloseOnMagic(PointedKey());   // a hold let go on the Magic wheel
+					} else if (quickkeys::RadialOpen()) {
+						CloseOnEquipment(PointedKey());   // a hold let go on the inventory wheel
 					}
 				}
 				out &= ~XINPUT_GAMEPAD_DPAD_DOWN;
@@ -371,6 +387,7 @@ namespace pad
 						if (wheels::Active() == wheels::Wheel::kMagic) {
 							CloseOnMagic(slot);
 						} else {
+							CloseOnEquipment(slot);
 							wheels::UseNow(slot);
 						}
 						g_latched = false;

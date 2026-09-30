@@ -65,6 +65,18 @@ namespace ui
 	UE::UObject* AddToCanvas(UE::UObject* a_canvas, const wchar_t* a_class, const wchar_t* a_name, UE::UObject** a_slot);
 	void         Anchors(UE::UObject* a_slot, double a_minX, double a_minY, double a_maxX, double a_maxY);
 
+	// a UserWidget's named child (UUserWidget::GetWidgetFromName), nullptr when it has none
+	UE::UObject* ChildNamed(UE::UObject* a_userWidget, const wchar_t* a_name);
+	// what an Image's brush draws (its ResourceObject): a texture or a material instance
+	UE::UObject* BrushResource(UE::UObject* a_image);
+	float        RenderOpacity(UE::UObject* a_widget);
+	// where a laid-out widget is on the viewport (viewport units): top-left and size (a world-context call, guarded)
+	bool         Measure(UE::UObject* a_widget, double& a_x, double& a_y, double& a_width, double& a_height);
+	// a dynamic material instance's parameters
+	float        MidScalar(UE::UObject* a_mid, const wchar_t* a_name);
+	void         SetMidScalar(UE::UObject* a_mid, const wchar_t* a_name, float a_v);
+	void         SetMidTexture(UE::UObject* a_mid, const wchar_t* a_name, UE::UObject* a_texture);
+
 	// the brush drawn as a rounded box (a_circle: half-height radius) with a fill and an outline colour
 	bool RoundedBox(UE::UObject* a_image, bool a_circle, const float a_fill[4], const float a_outline[4], float a_width);
 }

@@ -281,11 +281,61 @@ namespace rows
 		return loaded;
 	}
 
+	namespace
+	{
+		// A spell's first effect's magic effect. EffectItem is not declared by CommonLibOB64; Oblivion's layout (OBSE's
+		// GameObjects.h, widened to 64-bit) keeps EffectSetting* after six u32 of data and the script-effect pointer: +0x20.
+		// Read fault-guarded, and believed only when it is a live form of type MagicEffect.
+		RE::EffectSetting* FirstEffectRaw(RE::SpellItem* a_spell)
+		{
+			struct RawNode
+			{
+				const std::uint8_t* item;
+				const RawNode*      next;
+			};
+			__try {
+				// BSSimpleList keeps its first node inline: { item, next }
+				for (const auto* n = reinterpret_cast<const RawNode*>(&a_spell->effectList); n; n = n->next) {
+					if (!n->item) {
+						continue;
+					}
+					auto* setting = *reinterpret_cast<RE::EffectSetting* const*>(n->item + 0x20);
+					if (setting && reinterpret_cast<RE::TESForm*>(setting)->GetFormType() == RE::FormType::MagicEffect) {
+						return setting;
+					}
+					return nullptr;
+				}
+			} __except (EXCEPTION_EXECUTE_HANDLER) {
+			}
+			return nullptr;
+		}
+
+		std::unordered_set<std::uint32_t> g_spellIconFailed;
+	}
+
+	// the icon a magic row showed this session; else the spell's first effect's own icon, loaded from the paks
 	UE::UObject* SpellIcon(std::uint32_t a_formID)
 	{
 		Harvest();
-		const auto it = g_spellIcons.find(a_formID);
-		return it == g_spellIcons.end() ? nullptr : reflect::Get(it->second);
+		if (const auto it = g_spellIcons.find(a_formID); it != g_spellIcons.end()) {
+			if (auto* icon = reflect::Get(it->second)) return icon;
+		}
+		if (!a_formID || g_spellIconFailed.contains(a_formID)) return nullptr;
+		auto* spell = RE::TESForm::LookupByID<RE::SpellItem>(a_formID);
+		auto* effect = spell ? FirstEffectRaw(spell) : nullptr;
+		const char* icon = effect ? static_cast<RE::TESIcon*>(effect)->textureName.c_str() : nullptr;
+		const auto  path = icon && *icon ? IconAssetPath(icon) : std::string();
+		const std::wstring wpath(path.begin(), path.end());
+		auto* loaded = path.empty() ? nullptr : ui::Load(wpath.c_str());
+		if (!loaded) {
+			g_spellIconFailed.insert(a_formID);
+			logger::info("rows: no icon for spell 0x{:08X} from its effect ({}{})", a_formID, !effect ? "no effect read" : icon && *icon ? icon : "no icon path",
+				path.empty() ? std::string() : " -> " + path + " did not load");
+			return nullptr;
+		}
+		g_spellIcons[a_formID] = reflect::Hold(loaded);
+		logger::info("rows: icon for spell 0x{:08X} from its effect: {} -> {}", a_formID, icon, path);
+		return loaded;
 	}
 
 	std::uint32_t SpellByName(const std::string& a_name)
