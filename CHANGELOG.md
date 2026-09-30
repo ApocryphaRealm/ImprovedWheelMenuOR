@@ -6,6 +6,14 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Changed: the ammo wheel divides the half circle evenly, every entry the same size** (the owner, testing 465ca21: "The
+  iron and steel arrow overlap in the ammo wheel, and there are different sizes too, which is weird. It should be dividing
+  up the circumference evenly not pushing them both into the center").
+  - n entries each take one of n equal sectors from straight up to straight down, sitting at its middle: one in the
+    middle, two at 135 and 225 degrees, eight 22.5 degrees apart. This replaces the centred 22.5-degree spacing.
+  - The pointed entry is lit, not enlarged.
+- **Changed: no centre rest snap on the ammo wheel** (the owner: "otherwise it's inconvenient to use it"). The pointed
+  arrows stay pointed when the stick is let go. The main radial keeps its snap.
 - **Changed: the ammo wheel lays out as the Skyrim Perfected Wheeler's does** (the owner: "if you only have one arrow
   selected in the ammo wheel or one arrow favorited to it, then it centers to the middle of the semicircle and for every
   additional favorited arrow type it adds an additional radial entry and each arrow should have the same circle art as

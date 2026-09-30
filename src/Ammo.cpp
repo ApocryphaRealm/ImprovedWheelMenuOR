@@ -101,11 +101,14 @@ namespace ammo
 		// left; straight up is 90), 22.5 degrees apart, closer when that would reach past 112.5 / 247.5 - where the end
 		// ones would touch the screen's edge ("the arrows appear slightly off screen").
 		constexpr double kArcFrom = 112.5, kArcTo = 247.5, kStep = 22.5;
+		// The half circle divided evenly (the owner, 2026-09-30: "The iron and steel arrow overlap in the ammo wheel ... It
+		// should be dividing up the circumference evenly not pushing them both into the center"): n equal sectors from
+		// straight up (90) to straight down (270), each entry at its sector's middle - one entry sits in the middle (180),
+		// two at 135 / 225, eight 22.5 apart.
 		double EntryAngle(int a_i, int a_n)
 		{
 			if (a_n <= 1) return 180.0;
-			const double step = std::min(kStep, (kArcTo - kArcFrom) / (a_n - 1));
-			return 180.0 + (a_i - (a_n - 1) * 0.5) * step;
+			return 90.0 + (a_i + 0.5) * 180.0 / a_n;
 		}
 
 		std::array<double, 2> Place(int a_i, int a_n)
@@ -329,7 +332,7 @@ namespace ammo
 			for (int i = 0; i < g_count; ++i) {
 				if (auto* ring = reflect::Get(g_ring[i])) {
 					const bool on = i == g_pointed;
-					ui::Vec2(ring, L"SetRenderScale", on ? 1.2 : 1.0, on ? 1.2 : 1.0);
+					ui::Vec2(ring, L"SetRenderScale", 1.0, 1.0);   // every entry the same size: the pointed one is lit, not grown
 					ui::Colour(ring, on ? 1.0f : 0.8f, on ? 0.92f : 0.8f, on ? 0.7f : 0.8f, 1.0f);   // the pointed one brighter and warmer
 				}
 			}
@@ -339,7 +342,7 @@ namespace ammo
 					continue;
 				}
 				const bool on = i == g_pointed;
-				ui::Vec2(img, L"SetRenderScale", on ? 1.3 : 1.0, on ? 1.3 : 1.0);
+				ui::Vec2(img, L"SetRenderScale", 1.0, 1.0);
 				if (g_ids[i] == g_worn) {
 					ui::Colour(img, 1.0f, 0.82f, 0.35f, on ? 1.0f : 0.85f);   // the arrows worn now: gold
 				} else {
@@ -505,11 +508,8 @@ namespace ammo
 				g_resting = true;
 				g_restSince = now;
 			}
-			// the centre rest snap: the stick back in the middle for a moment points at nothing
-			if (s.centreRestSnap && g_pointedByStick && g_pointed >= 0 && now - g_restSince >= std::chrono::milliseconds(s.restSnapMs)) {
-				g_pointed = -1;
-				g_pointedByStick = false;
-			}
+			// no centre rest snap on the ammo wheel (the owner, 2026-09-30: "We'll have to turn off the center rest snap for
+			// the ammo wheel, otherwise it's inconvenient to use it") - the pointed arrows stay pointed; the main radial keeps it
 		}
 		if (a_pressed & XINPUT_GAMEPAD_DPAD_UP) {
 			g_pointed = Step(g_pointed, -1);
