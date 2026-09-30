@@ -53,6 +53,18 @@ namespace ui
 		return true;
 	}
 
+	bool GuardedProcessEvent(UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params)
+	{
+		__try {
+			a_obj->ProcessEvent(a_fn, a_params);
+			return true;
+		} __except (EXCEPTION_EXECUTE_HANDLER) {
+			return false;
+		}
+	}
+
+	bool Call::RunGuarded() { return m_fn && m_obj && GuardedProcessEvent(m_obj, m_fn, m_params.data()); }
+
 	bool CallFirst(UE::UObject* a_obj, const wchar_t* a_fn, const void* a_bytes, std::size_t a_size)
 	{
 		auto* fn = a_obj ? a_obj->FindFunction(UE::FName(a_fn, UE::EFindName::Find)) : nullptr;
@@ -158,7 +170,7 @@ namespace ui
 		c.Set("WorldContextObject", pc);
 		c.Set("WidgetType", cls);
 		c.Set("OwningPlayer", pc);
-		c.Run();
+		if (!c.RunGuarded()) return nullptr;   // a world-context call: fault-guarded (a quit, a load)
 		return c.Get<UE::UObject*>("ReturnValue");
 	}
 

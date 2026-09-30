@@ -34,6 +34,7 @@ namespace ui
 			return v;
 		}
 		bool Run();
+		bool RunGuarded();   // for a call that takes a world-context object: fault-guarded
 
 	private:
 		UE::UObject*              m_obj;
@@ -41,6 +42,10 @@ namespace ui
 		std::vector<std::uint8_t> m_params;
 	};
 
+	// ProcessEvent under a structured-exception guard: false when the engine faulted inside the call - a world-context
+	// call whose world a quit or a load tore down (Minimap Menu's crash on quitting, 2026-09-30 01:49:42; gate rule
+	// or-world-context-calls-are-guarded)
+	bool GuardedProcessEvent(UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params);
 	bool CallFirst(UE::UObject* a_obj, const wchar_t* a_fn, const void* a_bytes, std::size_t a_size);
 	void Vec2(UE::UObject* a_obj, const wchar_t* a_fn, double a_x, double a_y);
 	void Float(UE::UObject* a_obj, const wchar_t* a_fn, float a_v);
