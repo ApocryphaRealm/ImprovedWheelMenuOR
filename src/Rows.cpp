@@ -33,6 +33,7 @@ namespace rows
 		std::unordered_map<std::uint32_t, reflect::Handle> g_itemIcons, g_spellIcons;   // resolved through the slot when asked
 		std::unordered_map<std::string, std::uint32_t> g_spellsByName;
 		bool g_dirty = true;   // a row changed since the caches were last filled
+		std::atomic<bool> g_rowsChanged{ true };   // an inventory row fired an event since the favourites column last looked
 
 		// a_row must be live NOW: resolved from its Handle (or its seen slot) this frame, never a pointer kept from before
 		void* PropsOf(Kind& a_kind, UE::UObject* a_row)
@@ -132,7 +133,11 @@ namespace rows
 			}
 		}
 
-		void OnInventoryRow(UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params) { OnRow(g_inventory, a_obj, a_fn, a_params); }
+		void OnInventoryRow(UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params)
+		{
+			OnRow(g_inventory, a_obj, a_fn, a_params);
+			g_rowsChanged.store(true, std::memory_order_relaxed);
+		}
 		void OnMagicRow(UE::UObject* a_obj, UE::UFunction* a_fn, void* a_params) { OnRow(g_magic, a_obj, a_fn, a_params); }
 
 		void TryWatch(Kind& a_kind, const wchar_t* a_rowPath, const wchar_t* a_propsPath, pe::Handler a_handler, bool a_hasForm, const char* a_what)
@@ -184,6 +189,33 @@ namespace rows
 		TryWatch(g_inventory, kInventoryRowPath, kInventoryPropsPath, &OnInventoryRow, true, "inventory");
 		TryWatch(g_magic, kMagicRowPath, kMagicPropsPath, &OnMagicRow, false, "magic menu");
 	}
+
+	std::vector<UE::UObject*> LiveInventoryRows()
+	{
+		std::vector<UE::UObject*> out;
+		for (auto it = g_inventory.seen.begin(); it != g_inventory.seen.end();) {
+			auto* row = reflect::Get(it->first, it->second);
+			if (!row) {
+				it = g_inventory.seen.erase(it);
+				continue;
+			}
+			out.push_back(row);
+			++it;
+		}
+		return out;
+	}
+
+	std::string InventoryRowKey(UE::UObject* a_row)
+	{
+		const std::string key = KeyOfRow(g_inventory, a_row);
+		return key.empty() ? NameOfRow(g_inventory, a_row) : key;
+	}
+
+	std::uint32_t InventoryRowForm(UE::UObject* a_row) { return FormOfInventoryRow(a_row); }
+
+	bool TakeInventoryRowsChanged() { return g_rowsChanged.exchange(false, std::memory_order_relaxed); }
+
+	UE::UClass* InventoryRowClass() { return g_inventory.properties >= 0 ? g_inventory.rowClass : nullptr; }
 
 	std::uint32_t HighlightedItem()
 	{

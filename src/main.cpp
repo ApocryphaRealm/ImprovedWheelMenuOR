@@ -1,6 +1,7 @@
 // Improved Wheel Menu (Oblivion Remastered) - entry point.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "Favourites.h"
 #include "Controls.h"
 #include "Menus.h"
 #include "Pad.h"
@@ -82,6 +83,7 @@ namespace
 		// every 200 ms - never from a thread of our own (a start-up crashed in UObjectArray, 2026-09-29).
 		pad::SetFrameCallback([] {
 			tool::Pump();
+			favourites::Tick();   // the inventory's favourites column (every 100 ms while the inventory is open)
 			static auto next = std::chrono::steady_clock::now();
 			static bool reported = false;
 			static bool toolRegistered = false;

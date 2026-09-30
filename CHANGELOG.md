@@ -6,6 +6,16 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Added: the favourites column in the inventory** (the owner: "I still don't see the favorites column in the inventory
+  interface ... Maybe we can build it just like we did the buttons for the SLS mod", and "each item have a button. In
+  its column with an empty star shape then the star shape gets filled to be white whenever it's favorited").
+  Favourites.cpp adds one more column at the end of every inventory row's inv_entry_horizontal: the game's own empty
+  star (T_UI_star_default_D) over a white fill of ours (ImprovedWheelMenu\FavouriteStarFill.png - an original shape
+  drawn for the mod, imported at run time with ImportFileAsTexture2D; Slate clamps a tint, so the game's blue star
+  could not be tinted white), and the game's invisible button over both, as Simple Loadout System's boxes use it -
+  a click toggles the favourite exactly as Y does (never a stop for the controller: IsFocusable off). Rows are reused
+  as the list scrolls: each keeps its column, and only a row whose item or favourite state changed is redrawn, looked
+  at every 100 ms while the inventory is open and only when a row or a wheel moved.
 - **Changed: the Magic wheel is a wheel of its own** (the owner: "creating a second wheel, not just a renamed wheel, a
   second entirely different wheel, similar to how we created the ammo wheel. And this one needs to be specific to the
   magic inventory menu. Because when I go to inventory and magic, I still see all the same items. And only on the

@@ -59,8 +59,11 @@ namespace wheels
 			return settings::PluginFolder() / L"ImprovedWheelMenu" / (safe + ".txt");
 		}
 
+		std::atomic<std::uint32_t> g_generation{ 1 };   // moves with every saved change (the favourites column redraws)
+
 		void Save()
 		{
+			g_generation.fetch_add(1, std::memory_order_relaxed);
 			if (g_loadedFor.empty()) {
 				return;
 			}
@@ -93,6 +96,7 @@ namespace wheels
 		{
 			g_wheels = {};
 			g_loadedFor = a_name;
+			g_generation.fetch_add(1, std::memory_order_relaxed);
 			const auto path = FileFor(a_name);
 			std::ifstream f(path);
 			if (!f) {
@@ -592,6 +596,30 @@ namespace wheels
 			}
 		}
 		return false;
+	}
+
+	std::unordered_set<std::uint32_t> Favourites()
+	{
+		std::unordered_set<std::uint32_t> out;
+		if (!EnsureLoaded()) {
+			return out;
+		}
+		for (const int w : { kEquip, kAmmo }) {
+			for (const Slot& slot : g_wheels[w]) {
+				out.insert(slot.entries.begin(), slot.entries.end());
+			}
+		}
+		return out;
+	}
+
+	std::uint32_t Generation() { return g_generation.load(std::memory_order_relaxed); }
+
+	void ToggleItem(std::uint32_t a_formID)
+	{
+		if (!a_formID || !EnsureLoaded()) {
+			return;
+		}
+		ToggleFavourite(IsAmmo(a_formID) ? kAmmo : kEquip, a_formID);   // arrows go to the Ammo wheel, as Y
 	}
 
 	std::array<std::uint32_t, 8> MagicSlots()

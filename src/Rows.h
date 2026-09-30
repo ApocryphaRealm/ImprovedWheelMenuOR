@@ -27,5 +27,13 @@ namespace rows
 	std::uint32_t SpellByName(const std::string& a_name);   // the player's spell of that name (0 = none)
 	std::string   SpellName(std::uint32_t a_formID);
 
+	// the favourites column (Favourites.cpp): every live inventory row now, the key its name reads (a string-table key,
+	// else the text) and the item it shows; true from TakeInventoryRowsChanged when a row fired an event since the last ask
+	std::vector<UE::UObject*> LiveInventoryRows();
+	std::string               InventoryRowKey(UE::UObject* a_row);
+	std::uint32_t             InventoryRowForm(UE::UObject* a_row);
+	bool                      TakeInventoryRowsChanged();
+	UE::UClass*               InventoryRowClass();
+
 	std::string Status();                   // for the self-check
 }

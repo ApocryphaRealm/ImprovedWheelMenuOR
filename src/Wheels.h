@@ -2,6 +2,8 @@
 
 #include "Menus.h"
 
+#include <unordered_set>
+
 // ============================================================================================================
 // The three wheels (Equipment, Magic, Ammo) x eight slots x up to uEntriesPerSlot entries - the owner's rulings of
 // 2026-09-26 and 2026-09-29 (PLAN.md). The controls (Pad.cpp) call these; every call is on the game thread.
@@ -34,6 +36,10 @@ namespace wheels
 
 	void Favourite(menus::Menu a_menu);        // Y in the inventory / magic menu: the highlighted item or spell on/off its wheel
 	bool IsFavourite(std::uint32_t a_formID);  // on the Equipment or Ammo wheel - such an item cannot be dropped, sold or handed over
+	// every item on the Equipment or Ammo wheel, and a count that moves whenever any wheel changes (the favourites column)
+	std::unordered_set<std::uint32_t> Favourites();
+	std::uint32_t Generation();
+	void ToggleItem(std::uint32_t a_formID);   // the star in the inventory's favourites column: as Y on that item
 
 	// the Magic wheel's eight slots (key order): each slot's active spell, 0 = empty (MagicWheel.cpp draws them)
 	std::array<std::uint32_t, 8> MagicSlots();
