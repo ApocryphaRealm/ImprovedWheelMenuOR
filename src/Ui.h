@@ -76,6 +76,7 @@ namespace ui
 	float        MidScalar(UE::UObject* a_mid, const wchar_t* a_name);
 	void         SetMidScalar(UE::UObject* a_mid, const wchar_t* a_name, float a_v);
 	void         SetMidTexture(UE::UObject* a_mid, const wchar_t* a_name, UE::UObject* a_texture);
+	UE::UObject* MidTexture(UE::UObject* a_mid, const wchar_t* a_name);
 
 	// a widget by its name anywhere under a user widget - its tree, panels' slots and nested user widgets' trees - found
 	// by walking them and comparing names here (GetWidgetFromName found nothing in game, 2026-09-30)

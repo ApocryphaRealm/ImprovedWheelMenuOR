@@ -221,9 +221,15 @@ namespace wheels
 		// row has shown is drawn with that picture; every other slot keeps the game's.
 		std::chrono::steady_clock::time_point g_nextEquipCheck{};
 
+		// The inventory wheel's slots are drawn from the keys on the wheel's own material instance now (MagicWheel.cpp,
+		// the equipment pass): the game's picture list (the view model's Icons) was found EMPTY while the keys held items
+		// (2026-09-30 04:37, the primary's read), so the game set every slot's opacity to 0, and the old redraw here -
+		// SetQuickKeyByIndex, one "slot changed" click per slot - only swapped pictures in and never made them visible.
+		constexpr bool kRedrawThroughTheWidget = false;
+
 		void AssertEquipment()
 		{
-			if (!(quickkeys::RadialOpen() || quickkeys::PanelOpen())) {
+			if (!kRedrawThroughTheWidget || !(quickkeys::RadialOpen() || quickkeys::PanelOpen())) {
 				return;
 			}
 			const auto now = std::chrono::steady_clock::now();

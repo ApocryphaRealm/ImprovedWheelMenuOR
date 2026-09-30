@@ -6,6 +6,17 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: the inventory wheel showed none of its equipment** (the owner: "the inventory wheel is not showing the
+  equipment on the wheel"). The primary's read at 04:37: the game's picture list (the view model's Icons) was EMPTY while
+  the keys held items, so the game set every slot's opacity to 0 on both wheels' material instances; the old redraw
+  (SetQuickKeyByIndex, a click per slot) only swapped pictures in. The inventory wheel is now drawn from the keys on the
+  wheel's own instance - each slot's IDn texture and opacity, silently, checked every 100 ms while the wheel is up;
+  empty keys and spells stay empty. The widget redraw is off.
+- **Fixed: closing the radial on a Magic slot also used the game's key there** (04:37:34 and 04:37:38: "the game uses
+  slot 3" right after a Magic choice). The radial takes a moment to close and the stick, still pointing, pointed the slot
+  again; the stick is now held centred and the choice kept cleared until the radial has closed.
+  - Known: choosing a Magic slot does not change the HUD's spell - SetCurrentSpell sets the spell being cast, not the
+    selected one (selectedSpell stayed the old spell). The game's own spell-select path is being probed.
 - **Added: the favourites column in the magic menu** (the owner: "we need to add a star for favorites on the column in
   the magic menu"). Every magic row gets the same star at the end of its Magic_entry_horizontal: filled white while the
   spell is on the Magic wheel, and a click puts it on or takes it off the Magic wheel as Y does. The inventory column

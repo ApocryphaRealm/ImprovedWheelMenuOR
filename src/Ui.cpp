@@ -448,3 +448,14 @@ namespace ui
 		return Search(a_userWidget, a_name, 0);
 	}
 }
+
+namespace ui
+{
+	UE::UObject* MidTexture(UE::UObject* a_mid, const wchar_t* a_name)
+	{
+		Call c(a_mid, L"K2_GetTextureParameterValue");
+		if (!c) return nullptr;
+		c.Set("ParameterName", UE::FName(a_name, UE::EFindName::Add));
+		return c.Run() ? c.Get<UE::UObject*>("ReturnValue") : nullptr;
+	}
+}

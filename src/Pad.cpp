@@ -95,6 +95,7 @@ namespace pad
 		int  g_centreStick = 0;    // reads left with the right stick held centred (a cancelled radial must not point anywhere)
 		int g_pulseLS = 0;     // reads left of a synthetic left stick click (toggles the menu's assign panel)
 
+		bool g_closingMagic = false;   // the radial is closing on a Magic slot: the stick held centred, no slot pointed, until it has closed
 		bool g_magicPanel = false;   // the magic menu's panel is up (it reports no visibility change; tracked from our own toggles)
 		bool g_swallowA = false;     // A was ours (the magic menu's panel): the game never sees it, until let go
 		bool g_swallowX = false;     // X (drop) on a favourite: the game never sees it, until let go
@@ -165,6 +166,9 @@ namespace pad
 		{
 			quickkeys::CancelChoice();
 			wheels::UseMagic(a_slot);
+			// the radial takes a moment to close and the stick still points meanwhile: the game pointed the slot again and
+			// used ITS key there (2026-09-30 04:37:34, "the game uses slot 3" right after a Magic choice) - held off until closed
+			g_closingMagic = true;
 		}
 
 		// the HUD radial is closing on a slot of the inventory wheel whose game key holds a spell: that slot is drawn empty
@@ -446,6 +450,17 @@ namespace pad
 					out &= ~XINPUT_GAMEPAD_X;
 				} else {
 					g_swallowX = false;
+				}
+			}
+			if (g_closingMagic) {
+				if (!quickkeys::RadialOpen()) {
+					g_closingMagic = false;
+				} else {
+					a_pad.sThumbRX = 0;
+					a_pad.sThumbRY = 0;
+					if (quickkeys::PointedSlot() >= 1) {
+						quickkeys::CancelChoice();
+					}
 				}
 			}
 			if (g_centreStick > 0) {

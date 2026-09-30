@@ -169,6 +169,7 @@ namespace magicwheel
 		{
 			if (auto* game = reflect::Get(g_gameImg)) {
 				ui::Float(game, L"SetRenderOpacity", g_gameOpacity);
+				logger::info("magic wheel: the game's wheel picture shown again (opacity {:.2f}, now {:.2f})", g_gameOpacity, ui::RenderOpacity(game));
 			}
 			g_gameImg = {};
 		}
@@ -220,8 +221,11 @@ namespace magicwheel
 			// the game's picture hidden under ours (a different one after a load or in another menu: the old one back first)
 			if (reflect::Get(g_gameImg) != gameImg) {
 				RestoreGame();
+				// read as the panel may still be fading in: anything short of full is taken as full - the picture itself is
+				// never faded by the game (its parents are), and a part-way value put back left the inventory wheel faint
 				const float had = ui::RenderOpacity(gameImg);
-				g_gameOpacity = had > 0.05f ? had : 1.0f;
+				g_gameOpacity = had >= 0.99f ? had : 1.0f;
+				logger::debug("magic wheel: the game's wheel picture hidden (it had opacity {:.2f})", had);
 				ui::Float(gameImg, L"SetRenderOpacity", 0.0f);
 				g_gameImg = reflect::Hold(gameImg);
 			}
@@ -270,10 +274,15 @@ namespace magicwheel
 			return spell;
 		}
 
-		std::array<float, 8> g_savedOpacity{};   // a blanked slot's opacity as the game had it, put back when it stops being a spell
-		std::array<bool, 8>  g_blanked{};
 
-		// the inventory wheel: a key that shows a spell's picture and holds no item is a spell the game kept - drawn empty
+		// The inventory wheel, drawn from the game's keys on the wheel's own material instance: a slot whose key holds an
+		// item shows that item's picture at full opacity; a slot without one is empty (a spell the game kept included).
+		// Set on the instance directly - silent, unlike SetQuickKeyByIndex - and read back every 100 ms while the wheel is
+		// up, because the game puts its own values back whenever it redraws (from a picture list found empty in game,
+		// 2026-09-30 04:37 - every slot's opacity was 0 and the equipment never showed: "the inventory wheel is not showing
+		// the equipment on the wheel").
+		ULONGLONG g_equipLogged = 0;
+
 		void HideSpellKeys(UE::UObject* a_wheel)
 		{
 			const ULONGLONG now = GetTickCount64();
@@ -281,9 +290,10 @@ namespace magicwheel
 			g_nextEquip = now + 100;   // the inventory walk is not free
 			auto* gameImg = GameImage(a_wheel);
 			auto* gameMid = gameImg ? ui::BrushResource(gameImg) : nullptr;
-			if (!IsMid(gameMid)) gameMid = nullptr;
+			if (!IsMid(gameMid)) return;
 			const auto keys = inventory::Keys();
 			const auto icons = quickkeys::ReadIcons();
+			int shown = 0, set = 0;
 			for (int k = 0; k < 8; ++k) {
 				const auto u = static_cast<std::size_t>(k);
 				const bool spell = !keys[u] && IsSpellPicture(icons[u]);
@@ -291,21 +301,22 @@ namespace magicwheel
 					g_spellKey[u] = spell;
 					if (spell) logger::info("magic wheel: the game's key {} holds a spell - drawn empty on the inventory wheel", k + 1);
 				}
-				const std::wstring name = L"ID" + std::to_wstring(k + 1) + L"_Opacity";
-				if (spell && gameMid) {
-					const float op = ui::MidScalar(gameMid, name.c_str());
-					if (op > 0.0f) {
-						if (!g_blanked[u]) g_savedOpacity[u] = op;
-						ui::SetMidScalar(gameMid, name.c_str(), 0.0f);   // the game puts it back when it redraws: set again here
-						g_blanked[u] = true;
-					}
-				} else if (g_blanked[u]) {
-					if (gameMid && ui::MidScalar(gameMid, name.c_str()) == 0.0f) {
-						ui::SetMidScalar(gameMid, name.c_str(), g_savedOpacity[u] > 0.0f ? g_savedOpacity[u] : 1.0f);
-					}
-					g_blanked[u] = false;
-					logger::info("magic wheel: the game's key {} no longer holds a spell - its picture shown again", k + 1);
+				const std::wstring id = L"ID" + std::to_wstring(k + 1);
+				auto* tex = keys[u] ? rows::ItemIcon(keys[u]) : nullptr;
+				if (tex && ui::MidTexture(gameMid, (id + L"Texture").c_str()) != tex) {
+					ui::SetMidTexture(gameMid, (id + L"Texture").c_str(), tex);
+					++set;
 				}
+				const float want = tex ? 1.0f : 0.0f;
+				if (ui::MidScalar(gameMid, (id + L"_Opacity").c_str()) != want) {
+					ui::SetMidScalar(gameMid, (id + L"_Opacity").c_str(), want);
+					++set;
+				}
+				shown += tex ? 1 : 0;
+			}
+			if (set && now - g_equipLogged > 5000) {   // what the game had differed: said at most every 5 s
+				g_equipLogged = now;
+				logger::info("magic wheel: the inventory wheel drawn from the keys - {} of 8 slots hold an item ({} values set on its material)", shown, set);
 			}
 		}
 	}
