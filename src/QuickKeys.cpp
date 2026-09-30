@@ -3,6 +3,7 @@
 #include "Menus.h"
 #include "PEHook.h"
 #include "Reflect.h"
+#include "Ui.h"
 
 
 namespace quickkeys
@@ -363,6 +364,36 @@ namespace quickkeys
 	{
 		std::scoped_lock l(g_statusLock);
 		return g_status.panelOpen;
+	}
+
+	bool AnyWheelVisible()
+	{
+		// the wheel widgets, found by a whole-array scan at most every 2 s and kept by their slots
+		static std::vector<reflect::Handle> s_known;
+		static ULONGLONG                    s_nextScan = 0;
+		auto* cls = g_widgetClass.load(std::memory_order_acquire);
+		if (!cls || !reflect::Ok()) {
+			return false;
+		}
+		const ULONGLONG now = GetTickCount64();
+		if (now >= s_nextScan) {
+			s_nextScan = now + 2000;
+			s_known.clear();
+			for (auto* w : reflect::Instances(cls)) {
+				s_known.push_back(reflect::Hold(w));
+			}
+		}
+		for (const auto& h : s_known) {
+			auto* w = reflect::Get(h);
+			if (!w) {
+				continue;
+			}
+			ui::Call c(w, L"IsVisible");
+			if (c && c.Run() && c.Get<bool>("ReturnValue")) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	int PointedSlot()

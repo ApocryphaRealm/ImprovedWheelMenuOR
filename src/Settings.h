@@ -19,5 +19,6 @@ namespace settings
 	// Loads <plugin folder>\ImprovedWheelMenu.ini; missing file or keys keep the defaults, and the log says which.
 	void Load();
 	const Values& Get();
+	void SetAmmoButton(int a_mask);   // a rebind on the Controls page: kept in memory and written to [AmmoWheel] uButton
 	std::filesystem::path PluginFolder();   // ...\OblivionRemastered\Binaries\Win64\OBSE\Plugins
 }

@@ -626,6 +626,10 @@ namespace wheels
 				RemoveAt(kMagic, a_slot, idx, "assign pressed on a spell already in the slot");
 				RemoveFromOtherSlots(kMagic, a_slot, spell);
 			} else {
+				// one slot a spell (the owner, 2026-09-30: "if I assign magic to a slot, I shouldn't be able to assign it the
+				// same magic to two other slots. Because it's redundant" - as the Equipment wheel already keeps it): a spell
+				// assigned here leaves every other slot
+				RemoveFromOtherSlots(kMagic, a_slot, spell);
 				AddTo(kMagic, a_slot, spell, "assign");
 			}
 			Save();

@@ -1,6 +1,7 @@
 // Improved Wheel Menu (Oblivion Remastered) - entry point.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "Controls.h"
 #include "Menus.h"
 #include "Pad.h"
 #include "QuickKeys.h"
@@ -31,11 +32,12 @@ namespace
 			"Improved Wheel Menu {} self-check\n"
 			"widget class found: {}\nview model found: {}\nquick keys watch: {}\n"
 			"radial open now: {}\nmenu panel open now: {}\npointed slot: {} ({})\nlast chosen slot: {} ({})\nopens this session: {}\n"
-			"controller rules: {} (reads {}, rewritten {}, chained after {})\nmenu now: {}\nactive wheel: {}\nmenu rows: {}\nwheels: {}\ntes thread queue: {}\nproblem: {}\n",
+			"controller rules: {} (reads {}, rewritten {}, chained after {})\nmenu now: {}\nactive wheel: {}\nmenu rows: {}\nwheels: {}\ntes thread queue: {}\nammo wheel Controls row: {} (button {})\nproblem: {}\n",
 			IWM_VERSION, s.widgetClassFound ? "yes" : "no", s.viewModelFound ? "yes" : "no", s.hookInstalled ? "installed" : "NOT installed",
 			s.open ? "yes" : "no", s.panelOpen ? "yes" : "no", s.pointedSlot, SlotWord(s.pointedSlot), s.lastChosenSlot, SlotWord(s.lastChosenSlot), s.opens,
 			p.installed ? "installed" : "NOT installed", p.reads, p.rewritten, p.previousTarget.empty() ? "-" : p.previousTarget,
-			menus::Name(menus::Active()), wheels::Name(wheels::Active()), rows::Status(), wheels::Status(), testhread::Installed() ? "installed" : "NOT installed", s.problem.empty() ? "none" : s.problem);
+			menus::Name(menus::Active()), wheels::Name(wheels::Active()), rows::Status(), wheels::Status(), testhread::Installed() ? "installed" : "NOT installed",
+			controls::GetStatus().rowAdded ? "added" : "not added", controls::GetStatus().boundKey.empty() ? "-" : controls::GetStatus().boundKey, s.problem.empty() ? "none" : s.problem);
 		FILE* f = nullptr;
 		if (_wfopen_s(&f, path.c_str(), L"wb") == 0 && f) {
 			std::fwrite(text.data(), 1, text.size(), f);
@@ -92,6 +94,7 @@ namespace
 			quickkeys::Tick();
 			menus::Tick();
 			rows::Tick();
+			controls::Tick();   // the ammo wheel's Controls-page row and its button
 			if (!toolRegistered) {
 				toolRegistered = tool::Register();
 			}

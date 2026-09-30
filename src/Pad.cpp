@@ -202,6 +202,20 @@ namespace pad
 				// the D-pad, A, B and the right stick were the ammo wheel's
 			} else if (menu != menus::Menu::kNone) {
 				// ---- the inventory / magic menu ----
+				// the magic menu's panel, read from the widgets themselves five times a second (the owner, 2026-09-30:
+				// "I switched tabs to the magic and the magic wheel doesn't appear" - the panel stayed up across the tab
+				// switch, and the old toggle-tracking only learned of it from a D-pad down hold)
+				if (menu == menus::Menu::kMagic) {
+					static Clock::time_point s_nextLook{};
+					if (now >= s_nextLook) {
+						s_nextLook = now + 200ms;
+						const bool up = quickkeys::AnyWheelVisible();
+						if (up != g_magicPanel) {
+							logger::info("pad: the magic menu's wheel panel is {}", up ? "showing - the Magic wheel" : "hidden");
+						}
+						SetMagicPanel(up);
+					}
+				}
 				out &= ~XINPUT_GAMEPAD_Y;
 				if (pressed & XINPUT_GAMEPAD_Y) {
 					wheels::Favourite(menu);
@@ -228,10 +242,7 @@ namespace pad
 					g_menuDownFired = true;
 					g_pulseLS = kPulseReads;   // the game's own Show/Hide Shortcuts
 					logger::info("pad: D-pad down held in the {} - assign panel toggled", menus::Name(menu));
-					if (menu == menus::Menu::kMagic) {
-						SetMagicPanel(!g_magicPanel);
 					}
-				}
 				if (released & XINPUT_GAMEPAD_DPAD_DOWN) {
 					if (g_menuDownHeld && !g_menuDownFired) {
 						g_pulseDown = kPulseReads;   // a tap: the list moves one row, as before

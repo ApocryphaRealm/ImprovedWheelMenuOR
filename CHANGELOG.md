@@ -5,6 +5,30 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### Round 2 (the owner's report, 2026-09-30)
+- **Fixed: the ammo wheel never appeared.** The owner: "I don't see the ammo wheel while pressing D-pad right". The log
+  showed every press arriving with a bow held, followed by "the wheel cannot be built yet". The player-controller
+  lookup matched the engine's PlayerController class exactly. The game's controller is a subclass, so the lookup never
+  found it and the widget was never created. It now accepts subclasses.
+- **Added: an "Ammo Wheel" row on the game's Controller Controls page** (the owner: "make sure that you build the system
+  row and that the game recognizes the key presses properly").
+  - How it works: the plugin creates a runtime input action (IA_IWM_AmmoWheel) and maps it in IMC_Game_Default. The
+    row is placed after the game's quick keys row, its default is D-pad right, and it is modelled on Tween Menu's
+    Controls row.
+  - Rebinding: the row can be rebound there to any controller button. The rebind is kept in [AmmoWheel] uButton,
+    because the game's save cannot restore a runtime action. If the game re-applies its map without our action, the
+    action is put back.
+  - The press itself is still read from the controller.
+- **Fixed: the Magic wheel now appears in the magic menu when you switch tabs to it from the inventory with the wheel
+  panel showing.** The owner: "I switched tabs to the magic and the magic wheel doesn't appear."
+  - Cause: the magic menu's panel reports no visibility change, so the plugin only learned it was showing from its own
+    D-pad-down toggle, and the tab switch carries the panel across without one.
+  - Fix: the panel's visibility is now read from the wheel widgets themselves (UWidget::IsVisible) five times a second
+    while the magic menu is open.
+- **Changed: a spell goes on one slot of the Magic wheel only**, as items already do on the Equipment wheel (the owner:
+  "if I assign magic to a slot, I shouldn't be able to assign it the same magic to two other slots. Because it's
+  redundant"). Assigning a spell to a slot moves it there from any other slot.
+
 ### Added
 - the ammo wheel (the owner, 2026-09-29): a half wheel of up to eight arrow kinds locked to the middle of the right-hand
   edge, opened with D-pad right while a bow is held, in gameplay only ("It would default to D-pad right while holding a

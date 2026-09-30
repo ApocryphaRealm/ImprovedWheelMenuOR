@@ -122,7 +122,8 @@ namespace ammo
 			const std::wstring n = std::to_wstring(++g_builds);
 			auto* canvas = root ? ui::RootCanvas(root, (L"IwmAmmoCanvas" + n).c_str()) : nullptr;
 			if (!canvas) {
-				logger::info("ammo: the wheel cannot be built yet (no player controller or widget classes)");
+				logger::info("ammo: the wheel cannot be built yet ({})", !ui::PlayerController() ? "no player controller" :
+					!root ? "the user widget could not be created" : "its canvas could not be made");
 				return false;
 			}
 			const double R = Radius();

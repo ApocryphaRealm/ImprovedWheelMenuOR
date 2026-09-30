@@ -3,6 +3,7 @@
 #include "Tool.h"
 
 #include "Ammo.h"
+#include "Controls.h"
 #include "Inventory.h"
 #include "Menus.h"
 #include "Pad.h"
@@ -88,6 +89,10 @@ namespace tool
 			}
 			j["pictures_drawn"] = drawn;
 			j["ammo_wheel"] = ammo::State();
+			{
+				const auto c = controls::GetStatus();
+				j["ammo_controls_row"] = { { "action", c.actionCreated }, { "row", c.rowAdded }, { "key", c.boundKey }, { "problem", c.problem } };
+			}
 			return j;
 		}
 

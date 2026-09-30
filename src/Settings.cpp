@@ -55,4 +55,13 @@ namespace settings
 	{
 		return g_values;
 	}
+
+	void SetAmmoButton(int a_mask)
+	{
+		g_values.ammoButton = a_mask;
+		const auto ini = PluginFolder() / L"ImprovedWheelMenu.ini";
+		if (!WritePrivateProfileStringW(L"AmmoWheel", L"uButton", std::to_wstring(a_mask).c_str(), ini.c_str())) {
+			logger::warn("settings: [AmmoWheel] uButton={} could not be written to {} ({})", a_mask, ini.string(), GetLastError());
+		}
+	}
 }

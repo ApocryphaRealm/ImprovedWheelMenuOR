@@ -35,6 +35,9 @@ namespace quickkeys
 
 	bool RadialOpen();   // the HUD radial is showing
 	bool PanelOpen();    // a menu's assign panel is showing
+	// any wheel widget's own visibility says shown (UWidget::IsVisible). The magic menu's panel reports no visibility
+	// change through ProcessEvent, so in the magic menu this is how its panel is known to be up. Game thread.
+	bool AnyWheelVisible();
 	int  PointedSlot();  // the slot under the pointer on whichever is showing, -1 for none
 	void CancelChoice(); // B on the HUD radial: the view model points at no slot, so the close uses nothing
 
