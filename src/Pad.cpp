@@ -357,11 +357,17 @@ namespace pad
 					}
 					// A: in the inventory the game's Assign Item, watched (again on the same item removes it); in the magic
 					// menu the Magic wheel's own, and the game never sees it
+					// with no slot pointed there is nothing to assign: A stays the game's, and the spell under it is equipped
+					// (the owner, 2026-09-30: "I tried to select the alteration spell in there, but it wouldn't let me select
+					// it" - the panel read as showing and every A went to "assign with no slot pointed")
 					if (pressed & XINPUT_GAMEPAD_A) {
-						if (menu == menus::Menu::kMagic) {
-							g_swallowA = true;
+						const int pointed = PointedKey();
+						if (pointed >= 0) {
+							if (menu == menus::Menu::kMagic) {
+								g_swallowA = true;
+							}
+							wheels::AssignPressed(menu, pointed);
 						}
-						wheels::AssignPressed(menu, PointedKey());
 					}
 					out &= ~(XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_RIGHT);
 					const auto wheel = menu == menus::Menu::kMagic ? wheels::Wheel::kMagic : wheels::Wheel::kEquipment;

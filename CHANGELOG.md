@@ -6,6 +6,10 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: A in the magic menu did not equip a spell** (the owner, 2026-09-30: "I tried to select the alteration
+  spell in there, but it wouldn't let me select it"). The wheel panel read as showing from the menu's opening, and every A
+  was taken for an assign with no slot pointed. A is now the Magic wheel's only when a slot is pointed; otherwise the game
+  gets it.
 - **Fixed: the Magic wheel's spell pictures did not load** ("rows: no icon for spell ... (no effect read)"). OBSE's
   EffectItem layout (+0x20 for the EffectSetting*) read nothing in game; the effect's first 0x60 bytes are now searched,
   fault-guarded, for a pointer to a live MagicEffect form, and the offset found is kept and logged once.
