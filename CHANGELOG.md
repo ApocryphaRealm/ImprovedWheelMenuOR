@@ -6,6 +6,17 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Changed: pointing only points - RB (or A) uses, LT / RT choose the item, letting go uses nothing** (the owner:
+  "instead of using the games vanilla interaction where simply placing the cursor over the item selects it now that we
+  have multiple items per slot will have to have the the right bumper activate the item and the right trigger and left
+  trigger navigate which item they want from the slot and we'll need the center rest snap"). Closing the radial with the
+  wheel button - let go after a hold, or pressed again after a tap - now uses nothing on either wheel (CloseOnNothing:
+  the choice cleared and held cleared, the stick centred, until the radial has closed). RB and A use the pointed slot
+  as before; LT / RT step the slot's items; the centre rest snap stays on. The owner's report that nothing could be taken
+  from the wheel was the rest snap clearing every aim once the stick came back to the middle, and an RB on slot 2 after
+  its only item had been taken off it.
+- The settings page started for the rebind rule is dropped (the owner: "I'd rather just add a row in the control page
+  for the ammo wheel. And that's it") - the ammo wheel's row on the game's Controls page is already there.
 - **Added: each inventory-wheel slot shows its count, "3/5"** (the owner: "a counter on the slot showing how many items
   it holds and how many it allows in total ... so the player can see how many spaces are left"). SlotCounts.cpp lays
   eight labels of the game's text prefab over the game's wheel picture while the inventory wheel is up (the inventory's

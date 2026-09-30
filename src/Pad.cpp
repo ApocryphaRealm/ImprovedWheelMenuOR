@@ -171,6 +171,20 @@ namespace pad
 			g_closingMagic = true;
 		}
 
+		// The radial closing by the wheel button - let go after a hold, or pressed again after a tap - uses NOTHING, on either
+		// wheel (the owner, 2026-09-30: "now that we have multiple items per slot will have to have the right bumper activate
+		// the item and the right trigger and left trigger navigate which item they want from the slot and we'll need the
+		// center rest snap because otherwise it'll just release to use instead of needing to be activated"). RB (and A) use
+		// the pointed slot; the choice is kept cleared, with the stick held centred, until the radial has closed.
+		void CloseOnNothing(const char* a_how)
+		{
+			const int pointed = PointedKey();
+			quickkeys::CancelChoice();
+			g_closingMagic = true;
+			logger::info("pad: the wheel closed by {} - nothing used{}", a_how,
+				pointed >= 0 ? std::format(" (slot {} was pointed: RB or A uses a slot)", pointed + 1) : std::string());
+		}
+
 		// the HUD radial is closing on a slot of the inventory wheel whose game key holds a spell: that slot is drawn empty
 		// (MagicWheel.cpp), so it uses nothing - spells are the Magic wheel's
 		void CloseOnEquipment(int a_slot)
@@ -368,11 +382,9 @@ namespace pad
 				if (pressed & XINPUT_GAMEPAD_DPAD_DOWN) {
 					if (g_latched) {
 						g_latched = false;
-						g_suppressDown = true;   // the game sees the button go up: the wheel closes on the pointed slot
-						if (wheels::Active() == wheels::Wheel::kMagic && quickkeys::RadialOpen()) {
-							CloseOnMagic(PointedKey());
-						} else if (quickkeys::RadialOpen()) {
-							CloseOnEquipment(PointedKey());
+						g_suppressDown = true;   // the game sees the button go up: the wheel closes - on nothing
+						if (quickkeys::RadialOpen()) {
+							CloseOnNothing("the wheel button pressed again");
 						}
 					} else {
 						g_gameDownAt = now;
@@ -384,10 +396,8 @@ namespace pad
 					} else if (now - g_gameDownAt < kHoldThreshold && quickkeys::RadialOpen()) {
 						g_latched = true;        // a tap: the wheel stays open until the next press
 						logger::info("pad: wheel button tapped - the wheel stays open until the next press");
-					} else if (wheels::Active() == wheels::Wheel::kMagic && quickkeys::RadialOpen()) {
-						CloseOnMagic(PointedKey());   // a hold let go on the Magic wheel
 					} else if (quickkeys::RadialOpen()) {
-						CloseOnEquipment(PointedKey());   // a hold let go on the inventory wheel
+						CloseOnNothing("the wheel button let go");   // a hold let go: nothing used, on either wheel
 					}
 				}
 				out &= ~XINPUT_GAMEPAD_DPAD_DOWN;
