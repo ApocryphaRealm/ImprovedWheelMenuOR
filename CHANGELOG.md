@@ -12,8 +12,11 @@ in `git log`. A version number is issued by the version gate only once a build i
   what its brush draws; when it is not our instance, the instance is made again and set (a warning names what it
   found). With nothing pointed - an empty wheel - the selector goes to slot 3 in the hidden right half, instead of the
   material's default slot 8.
-  - Known: an arrow's picture still comes from an inventory row seen this session ("no picture for ... yet" in the log).
-    A source that works straight after a load is being looked for.
+- **Fixed: no arrow pictures until the inventory had shown them.** An item's picture now also comes from its own form:
+  its icon path (TESIcon, "Weapons\IronArrow.dds") names the remaster's texture - /Game/Art/UI/Icons/Dynamic_Icons/
+  menus/icons/weapons/T_ironarrow, the folder in lower case, "T_" and the lower-case stem (the primary session's reads
+  and the paks) - loaded when first asked. Arrows, weapons, books, misc items, apparatus, ingredients, potions and
+  lights; a "rows: icon for ..." line names each one loaded, and a failure is logged once and not retried.
   - The 02:37 empty wheel was the owner's Y presses in the inventory removing both arrows (Y toggles a favourite).
 - **Changed: the ammo wheel is the game's own wheel, sliced in half** (the owner: "the arrows icons and slot outline is
   too small for my liking and the highlighting effect is too dim ... basically just a carbon copy of the game's wheel

@@ -3,6 +3,7 @@
 #include "PEHook.h"
 #include "Inventory.h"
 #include "Reflect.h"
+#include "Ui.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -218,11 +219,66 @@ namespace rows
 		return id;
 	}
 
+	namespace
+	{
+		// The form's own icon path (TESIcon), as the plugin data gives it: "Weapons\IronArrow.dds"
+		const RE::TESIcon* IconOf(RE::TESForm* a_form)
+		{
+			if (!a_form) return nullptr;
+			switch (a_form->GetFormType()) {
+			case RE::FormType::Ammo: return a_form->As<RE::TESAmmo>();
+			case RE::FormType::Weapon: return a_form->As<RE::TESObjectWEAP>();
+			case RE::FormType::Book: return a_form->As<RE::TESObjectBOOK>();
+			case RE::FormType::Misc: return a_form->As<RE::TESObjectMISC>();
+			case RE::FormType::Apparatus: return a_form->As<RE::TESObjectAPPA>();
+			case RE::FormType::Ingredient: return a_form->As<RE::IngredientItem>();
+			case RE::FormType::AlchemyItem: return a_form->As<RE::AlchemyItem>();
+			case RE::FormType::Light: return a_form->As<RE::TESObjectLIGH>();
+			default: return nullptr;
+			}
+		}
+
+		// The remaster's texture for that path (the primary session's reads, 2026-09-30: Arrow1Iron's icon is
+		// "Weapons\IronArrow.dds", and the paks hold /Game/Art/UI/Icons/Dynamic_Icons/menus/icons/weapons/T_ironarrow -
+		// the folder in lower case, "T_" and the lower-case stem; the HUD's own textures follow the same rule)
+		std::string IconAssetPath(std::string_view a_icon)
+		{
+			std::string p(a_icon);
+			for (auto& c : p) c = c == '\\' ? '/' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+			if (const auto dot = p.rfind('.'); dot != std::string::npos) p.resize(dot);
+			const auto slash = p.rfind('/');
+			const std::string dir = slash == std::string::npos ? std::string() : p.substr(0, slash + 1);
+			const std::string stem = slash == std::string::npos ? p : p.substr(slash + 1);
+			if (stem.empty()) return {};
+			return "/Game/Art/UI/Icons/Dynamic_Icons/menus/icons/" + dir + "T_" + stem + ".T_" + stem;
+		}
+
+		std::unordered_set<std::uint32_t> g_iconFailed;   // forms whose icon path loaded nothing: not tried again
+	}
+
+	// the icon a row showed for it this session; else the form's own icon, loaded from the paks (works straight after a
+	// load - the owner, 2026-09-30: no arrows on the ammo wheel until the inventory had shown them)
 	UE::UObject* ItemIcon(std::uint32_t a_formID)
 	{
 		Harvest();
-		const auto it = g_itemIcons.find(a_formID);
-		return it == g_itemIcons.end() ? nullptr : reflect::Get(it->second);
+		if (const auto it = g_itemIcons.find(a_formID); it != g_itemIcons.end()) {
+			if (auto* icon = reflect::Get(it->second)) return icon;
+		}
+		if (!a_formID || g_iconFailed.contains(a_formID)) return nullptr;
+		const auto* tex = IconOf(RE::TESForm::LookupByID(a_formID));
+		const char* icon = tex ? tex->textureName.c_str() : nullptr;
+		const auto  path = icon && *icon ? IconAssetPath(icon) : std::string();
+		const std::wstring wpath(path.begin(), path.end());   // the path is ASCII
+		auto*       loaded = path.empty() ? nullptr : ui::Load(wpath.c_str());
+		if (!loaded) {
+			g_iconFailed.insert(a_formID);
+			logger::info("rows: no icon for 0x{:08X} from its form ({}{})", a_formID, icon && *icon ? icon : "no icon path",
+				path.empty() ? std::string() : " -> " + path + " did not load");
+			return nullptr;
+		}
+		g_itemIcons[a_formID] = reflect::Hold(loaded);
+		logger::info("rows: icon for 0x{:08X} from its form: {} -> {}", a_formID, icon, path);
+		return loaded;
 	}
 
 	UE::UObject* SpellIcon(std::uint32_t a_formID)

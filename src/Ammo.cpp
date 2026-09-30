@@ -457,7 +457,7 @@ namespace ammo
 				if (slot >= 1 && slot <= 8 && g_ids[i]) {
 					tex[static_cast<std::size_t>(slot)] = rows::ItemIcon(g_ids[i]);
 					if (!tex[static_cast<std::size_t>(slot)] && g_ids[i] != g_shownIds[i]) {
-						logger::info("ammo: no picture for {} yet - one shows once an inventory row has shown it this session", inventory::NameOf(g_ids[i]));
+						logger::info("ammo: no picture for {} - no inventory row showed it and its form's icon did not load (see the rows: line)", inventory::NameOf(g_ids[i]));
 					}
 				}
 			}
@@ -505,7 +505,7 @@ namespace ammo
 					b.Set("bMatchSize", false);
 					b.Run();
 				} else if (g_ids[i]) {
-					logger::info("ammo: no picture for {} yet - one shows once an inventory row has shown it this session", inventory::NameOf(g_ids[i]));
+					logger::info("ammo: no picture for {} - no inventory row showed it and its form's icon did not load (see the rows: line)", inventory::NameOf(g_ids[i]));
 				}
 				ui::Visible(img, icon != nullptr);
 				g_shownIds[i] = g_ids[i];
