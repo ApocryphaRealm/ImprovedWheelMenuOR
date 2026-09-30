@@ -479,11 +479,15 @@ namespace wheels
 					previous ? inventory::NameOf(previous) : "nothing");
 				RemoveFromOtherSlots(kEquip, a_slot, a_arrived);
 			} else if (static_cast<int>(slot.entries.size()) >= Cap()) {
-				inventory::ClearKey(a_arrived);
-				if (previous) {
-					inventory::SetKey(previous, a_slot);
-				}
-				logger::info("wheels: Equipment slot {} is full ({} entries) - {} not added", a_slot + 1, Cap(), inventory::NameOf(a_arrived));
+				// full: the new favourite takes the place of the entry the slot shows - the one D-pad left / right stepped to
+				// (the owner, 2026-09-30: "D-pad LEFT/RIGHT in the inventory steps through the slot's items to choose which one a
+				// new favourite replaces"). The game's key is already on the new item; the one replaced leaves the wheel.
+				const int at = slot.active >= 0 && slot.active < static_cast<int>(slot.entries.size()) ? slot.active : 0;
+				const auto out = slot.entries[at];
+				slot.entries[at] = a_arrived;
+				slot.active = at;
+				logger::info("wheels: Equipment slot {} is full ({} entries) - {} REPLACES {} (entry {})", a_slot + 1, Cap(), inventory::NameOf(a_arrived),
+					inventory::NameOf(out), at + 1);
 			} else {
 				slot.entries.push_back(a_arrived);
 				slot.active = static_cast<int>(slot.entries.size()) - 1;
@@ -654,6 +658,21 @@ namespace wheels
 		}
 		ToggleFavourite(IsAmmo(a_formID) ? kAmmo : kEquip, a_formID);   // arrows go to the Ammo wheel, as Y
 	}
+
+	std::array<int, 8> SlotCounts(Wheel a_wheel)
+	{
+		std::array<int, 8> out{};
+		if (!EnsureLoaded()) {
+			return out;
+		}
+		const int w = a_wheel == Wheel::kMagic ? kMagic : a_wheel == Wheel::kAmmo ? kAmmo : kEquip;
+		for (int s = 0; s < inventory::kSlots; ++s) {
+			out[s] = static_cast<int>(g_wheels[w][s].entries.size());
+		}
+		return out;
+	}
+
+	int SlotCap() { return Cap(); }
 
 	std::unordered_set<std::uint32_t> MagicFavourites()
 	{

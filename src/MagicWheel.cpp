@@ -7,6 +7,7 @@
 #include "QuickKeys.h"
 #include "Reflect.h"
 #include "Rows.h"
+#include "SlotCounts.h"
 #include "Ui.h"
 #include "Wheels.h"
 
@@ -329,12 +330,20 @@ namespace magicwheel
 		const bool equip = (radial && wheels::Active() == wheels::Wheel::kEquipment) || (menu == menus::Menu::kInventory && quickkeys::PanelOpen());
 		auto* wheel = magic || equip ? quickkeys::VisibleWheel() : nullptr;
 		if (magic && wheel) {
+			slotcounts::Hide();
 			Show(wheel);
 			return;
 		}
 		Hide(magic ? "no wheel on screen" : "the Magic wheel is not up");
 		if (equip && wheel) {
 			HideSpellKeys(wheel);
+			if (auto* img = GameImage(wheel)) {
+				slotcounts::Show(img);   // "3/5" on each slot
+			} else {
+				slotcounts::Hide();
+			}
+		} else {
+			slotcounts::Hide();
 		}
 	}
 

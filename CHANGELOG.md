@@ -6,6 +6,16 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Added: each inventory-wheel slot shows its count, "3/5"** (the owner: "a counter on the slot showing how many items
+  it holds and how many it allows in total ... so the player can see how many spaces are left"). SlotCounts.cpp lays
+  eight labels of the game's text prefab over the game's wheel picture while the inventory wheel is up (the inventory's
+  panel, or the HUD radial on the Equipment wheel), each just below its slot circle (0.71 of the half-width out, from the
+  owner's 03:38 screenshot - to be checked in game); a label is set again only when its count changes.
+- **Changed: a full slot takes a new favourite in place of the entry it shows** (the owner: "D-pad LEFT/RIGHT in the
+  inventory steps through the slot's items to choose which one a new favourite replaces"). D-pad left / right already
+  steps the pointed slot's shown entry; the game's assign on a full slot now replaces that entry (logged REPLACES) instead
+  of being refused. LT / RT on the HUD radial step a slot's entries as before - with the wheel now drawn from the keys,
+  the picture follows each step.
 - **Changed: A chooses and closes on the Magic wheel, as on the game's own** (the owner: "I tried selecting clairvoyance
   with pressing A like the vanilla game does and it didn't close the wheel ... it only selected it when I pressed the right
   bumper it should do both"). A on the radial's Magic wheel sets the pointed slot's spell and lets the wheel close, like
