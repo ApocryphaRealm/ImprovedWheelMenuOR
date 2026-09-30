@@ -14,6 +14,9 @@ namespace wheels
 	{
 		constexpr int kEquip = 0;
 		constexpr int kMagic = 1;
+		constexpr int kAmmo = 2;   // the bow's ammo wheel: one arrow kind a slot, entirely ours
+		constexpr int kWheels = 3;
+		constexpr const char* kWheelNames[kWheels] = { "Equipment", "Magic", "Ammo" };
 
 		std::atomic<int> g_active{ static_cast<int>(Wheel::kEquipment) };
 
@@ -23,12 +26,22 @@ namespace wheels
 			int active = -1;                      // index into entries, -1 = none
 		};
 		using WheelSlots = std::array<Slot, inventory::kSlots>;
-		std::array<WheelSlots, 2> g_wheels;
+		std::array<WheelSlots, kWheels> g_wheels;
 		std::string g_loadedFor;   // the character g_wheels belongs to
+
+		int MigrateAmmo();
 
 		// what the wheel's pictures are showing now
 		enum class Shown { kGame, kMagic };
 		Shown g_shown = Shown::kGame;
+
+		const char* WheelName(int a_wheel) { return a_wheel >= 0 && a_wheel < kWheels ? kWheelNames[a_wheel] : "?"; }
+
+		bool IsAmmo(std::uint32_t a_id)
+		{
+			auto* form = a_id ? RE::TESForm::LookupByID(a_id) : nullptr;
+			return form && form->GetFormType() == RE::FormType::Ammo;
+		}
 
 		std::string NameOf(int a_wheel, std::uint32_t a_id)
 		{
@@ -61,13 +74,13 @@ namespace wheels
 			}
 			f << "# Improved Wheel Menu - the wheels of " << g_loadedFor << "\n";
 			f << "# <wheel> <slot 1-8> active=<entry, 0 = none> <formID>...\n";
-			for (int w = 0; w < 2; ++w) {
+			for (int w = 0; w < kWheels; ++w) {
 				for (int s = 0; s < inventory::kSlots; ++s) {
 					const Slot& slot = g_wheels[w][s];
 					if (slot.entries.empty()) {
 						continue;
 					}
-					f << (w == kEquip ? "Equipment" : "Magic") << ' ' << (s + 1) << " active=" << (slot.active + 1);
+					f << WheelName(w) << ' ' << (s + 1) << " active=" << (slot.active + 1);
 					for (const auto id : slot.entries) {
 						f << std::format(" 0x{:08X}", id);
 					}
@@ -99,7 +112,7 @@ namespace wheels
 					logger::warn("wheels: unreadable line in {}: {}", path.filename().string(), line);
 					continue;
 				}
-				Slot& slot = g_wheels[wheel == "Magic" ? kMagic : kEquip][slotNo - 1];
+				Slot& slot = g_wheels[wheel == "Magic" ? kMagic : wheel == "Ammo" ? kAmmo : kEquip][slotNo - 1];
 				std::string id;
 				while (in >> id) {
 					slot.entries.push_back(static_cast<std::uint32_t>(std::stoul(id, nullptr, 16)));
@@ -151,6 +164,7 @@ namespace wheels
 				Load(name);
 			}
 			Reconcile();
+			MigrateAmmo();
 			return true;
 		}
 
@@ -322,7 +336,7 @@ namespace wheels
 			if (slot.active > a_index) {
 				--slot.active;
 			}
-			if (a_wheel == kMagic) {
+			if (a_wheel != kEquip) {   // Magic and Ammo are data only
 				if (wasActive) {
 					slot.active = slot.entries.empty() ? -1 : std::min(a_index, static_cast<int>(slot.entries.size()) - 1);
 				}
@@ -341,7 +355,7 @@ namespace wheels
 				}
 			}
 			logger::info("wheels: {} - {} REMOVED from {} slot {}; slot now {} entr{} (active: {})", a_why, NameOf(a_wheel, gone),
-				a_wheel == kMagic ? "Magic" : "Equipment", a_slot + 1, slot.entries.size(), slot.entries.size() == 1 ? "y" : "ies",
+				WheelName(a_wheel), a_slot + 1, slot.entries.size(), slot.entries.size() == 1 ? "y" : "ies",
 				slot.active >= 0 ? NameOf(a_wheel, slot.entries[slot.active]) : "none");
 		}
 
@@ -366,7 +380,7 @@ namespace wheels
 		{
 			Slot& slot = g_wheels[a_wheel][a_slot];
 			if (static_cast<int>(slot.entries.size()) >= Cap()) {
-				logger::info("wheels: {} slot {} is full ({} entries) - {} not added", a_wheel == kMagic ? "Magic" : "Equipment", a_slot + 1, Cap(),
+				logger::info("wheels: {} slot {} is full ({} entries) - {} not added", WheelName(a_wheel), a_slot + 1, Cap(),
 					NameOf(a_wheel, a_id));
 				return false;
 			}
@@ -376,7 +390,7 @@ namespace wheels
 			slot.entries.push_back(a_id);
 			slot.active = static_cast<int>(slot.entries.size()) - 1;
 			logger::info("wheels: {} - {} ADDED to {} slot {}; slot now {} entr{}, it is the active one", a_why, NameOf(a_wheel, a_id),
-				a_wheel == kMagic ? "Magic" : "Equipment", a_slot + 1, slot.entries.size(), slot.entries.size() == 1 ? "y" : "ies");
+				WheelName(a_wheel), a_slot + 1, slot.entries.size(), slot.entries.size() == 1 ? "y" : "ies");
 			return true;
 		}
 
@@ -448,6 +462,7 @@ namespace wheels
 			}
 			Save();
 			PatchChanged(original);
+			MigrateAmmo();   // arrows the game's own assign put on a key go to the Ammo wheel
 		}
 
 		void SettleNothing()
@@ -475,8 +490,8 @@ namespace wheels
 					return;
 				}
 			}
-			// an empty slot first, then any slot with room
-			for (int pass = 0; pass < 2; ++pass) {
+			// an empty slot first, then any slot with room (the Ammo wheel: one arrow kind a slot, empty slots only)
+			for (int pass = 0; pass < (a_wheel == kAmmo ? 1 : 2); ++pass) {
 				for (int s = 0; s < inventory::kSlots; ++s) {
 					const Slot& slot = g_wheels[a_wheel][s];
 					const bool fits = pass == 0 ? slot.entries.empty() : static_cast<int>(slot.entries.size()) < Cap();
@@ -488,13 +503,57 @@ namespace wheels
 					}
 				}
 			}
-			logger::info("wheels: Favourite - every {} slot is full", a_wheel == kMagic ? "Magic" : "Equipment");
+			logger::info("wheels: Favourite - every {} slot is full", WheelName(a_wheel));
+		}
+
+		// Arrows belong on the Ammo wheel (the owner, 2026-09-29: "if anything's already on the normal wheel, they would
+		// get moved over. And make sure that the normal wheel is refreshed so there's nothing stale left on it."). Every
+		// arrow entry on the Equipment wheel leaves it - the game's key with it, so the radial no longer shows it - and
+		// goes to the Ammo wheel's first empty slot unless it is there already. Returns how many moved.
+		int MigrateAmmo()
+		{
+			const auto before = inventory::Keys();
+			int moved = 0;
+			for (int s = 0; s < inventory::kSlots; ++s) {
+				for (int i = static_cast<int>(g_wheels[kEquip][s].entries.size()) - 1; i >= 0; --i) {
+					if (i >= static_cast<int>(g_wheels[kEquip][s].entries.size())) {
+						continue;   // a removal above re-seated the slot
+					}
+					const auto id = g_wheels[kEquip][s].entries[i];
+					if (!IsAmmo(id)) {
+						continue;
+					}
+					RemoveAt(kEquip, s, i, "arrows belong on the Ammo wheel");
+					++moved;
+					bool there = false;
+					for (const Slot& a : g_wheels[kAmmo]) {
+						there = there || IndexOf(a, id) >= 0;
+					}
+					if (there) {
+						continue;
+					}
+					bool placed = false;
+					for (int a = 0; a < inventory::kSlots && !placed; ++a) {
+						placed = g_wheels[kAmmo][a].entries.empty() && AddTo(kAmmo, a, id, "moved from the Equipment wheel");
+					}
+					if (!placed) {
+						logger::info("wheels: the Ammo wheel is full - {} left the Equipment wheel and is on no wheel now", inventory::NameOf(id));
+					}
+				}
+			}
+			if (moved) {
+				Save();
+				PatchChanged(before);   // the Equipment wheel's pictures follow its keys: nothing stale left on it
+				Refresh();
+				logger::info("wheels: {} arrow entr{} moved from the Equipment wheel to the Ammo wheel", moved, moved == 1 ? "y" : "ies");
+			}
+			return moved;
 		}
 	}
 
 	const char* Name(Wheel a_wheel)
 	{
-		return a_wheel == Wheel::kMagic ? "Magic" : "Equipment";
+		return a_wheel == Wheel::kMagic ? "Magic" : a_wheel == Wheel::kAmmo ? "Ammo" : "Equipment";
 	}
 
 	Wheel Active()
@@ -507,12 +566,28 @@ namespace wheels
 		if (!a_formID || !EnsureLoaded()) {
 			return false;
 		}
-		for (const Slot& slot : g_wheels[kEquip]) {
-			if (IndexOf(slot, a_formID) >= 0) {
-				return true;
+		for (const int w : { kEquip, kAmmo }) {
+			for (const Slot& slot : g_wheels[w]) {
+				if (IndexOf(slot, a_formID) >= 0) {
+					return true;
+				}
 			}
 		}
 		return false;
+	}
+
+	std::array<std::uint32_t, 8> AmmoSlots()
+	{
+		std::array<std::uint32_t, 8> out{};
+		if (!EnsureLoaded()) {
+			return out;
+		}
+		for (int s = 0; s < inventory::kSlots; ++s) {
+			const Slot& slot = g_wheels[kAmmo][s];
+			const auto id = slot.active >= 0 ? slot.entries[slot.active] : 0;
+			out[s] = id && inventory::Has(id) ? id : 0;
+		}
+		return out;
 	}
 
 	void Favourite(menus::Menu a_menu)
@@ -526,7 +601,7 @@ namespace wheels
 			}
 		} else if (a_menu == menus::Menu::kInventory) {
 			if (const auto item = rows::HighlightedItem()) {
-				ToggleFavourite(kEquip, item);
+				ToggleFavourite(IsAmmo(item) ? kAmmo : kEquip, item);   // arrows go to the Ammo wheel
 			}
 		}
 	}
@@ -610,7 +685,7 @@ namespace wheels
 		if (!EnsureLoaded()) {
 			return;
 		}
-		const int w = a_wheel == Wheel::kMagic ? kMagic : kEquip;
+		const int w = a_wheel == Wheel::kMagic ? kMagic : a_wheel == Wheel::kAmmo ? kAmmo : kEquip;
 		Slot& slot = g_wheels[w][a_slot];
 		const int n = static_cast<int>(slot.entries.size());
 		int next = -1;
@@ -650,7 +725,7 @@ namespace wheels
 		if (a_slot < 0 || !EnsureLoaded()) {
 			return;
 		}
-		const int w = a_wheel == Wheel::kMagic ? kMagic : kEquip;
+		const int w = a_wheel == Wheel::kMagic ? kMagic : a_wheel == Wheel::kAmmo ? kAmmo : kEquip;
 		Slot& slot = g_wheels[w][a_slot];
 		if (slot.active < 0) {
 			logger::info("wheels: REMOVE - {} slot {} is empty", Name(a_wheel), a_slot + 1);
@@ -725,7 +800,7 @@ namespace wheels
 		if (!EnsureLoaded()) {
 			return out;
 		}
-		const int w = a_wheel == Wheel::kMagic ? kMagic : kEquip;
+		const int w = a_wheel == Wheel::kMagic ? kMagic : a_wheel == Wheel::kAmmo ? kAmmo : kEquip;
 		for (int s = 0; s < inventory::kSlots; ++s) {
 			const Slot& slot = g_wheels[w][s];
 			for (int i = 0; i < static_cast<int>(slot.entries.size()); ++i) {
@@ -737,12 +812,13 @@ namespace wheels
 
 	std::string Status()
 	{
-		int equip = 0, magic = 0;
+		int equip = 0, magic = 0, ammo = 0;
 		for (int s = 0; s < inventory::kSlots; ++s) {
 			equip += static_cast<int>(g_wheels[kEquip][s].entries.size());
 			magic += static_cast<int>(g_wheels[kMagic][s].entries.size());
+			ammo += static_cast<int>(g_wheels[kAmmo][s].entries.size());
 		}
-		return std::format("character {}; Equipment {} entries, Magic {} entries; pictures show {}", g_loadedFor.empty() ? "-" : g_loadedFor, equip,
-			magic, g_shown == Shown::kGame ? "the game's keys" : g_shown == Shown::kMagic ? "the Magic wheel" : "the Equipment wheel");
+		return std::format("character {}; Equipment {} entries, Magic {} entries, Ammo {} entries; pictures show {}", g_loadedFor.empty() ? "-" : g_loadedFor, equip,
+			magic, ammo, g_shown == Shown::kGame ? "the game's keys" : g_shown == Shown::kMagic ? "the Magic wheel" : "the Equipment wheel");
 	}
 }

@@ -19,6 +19,8 @@
 //                     open; the next press lets go of it, and the game uses the pointed slot. A hold works as before.
 //     with the radial open: D-pad L/R switch wheels, LT/RT cycle the pointed slot's entries, RB uses the pointed
 //     slot now, LB removes its entry, B closes the wheel without using anything - none of them reach the game.
+//     The right stick back at rest in the middle for uRestSnapMs points at no slot (the centre rest snap).
+//   With a bow held, the ammo wheel's button (D-pad right) opens the ammo wheel (Ammo.h), which then takes the read.
 //
 // Never loads an XInput DLL (gate oblivion-plugin-never-loads-xinput): only the game's own import is used.
 // ============================================================================================================

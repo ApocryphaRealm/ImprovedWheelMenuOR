@@ -1,7 +1,8 @@
 -- Improved Wheel Menu for The Elder Scrolls IV: Oblivion Remastered (OBSE64 plugin).
 -- The game's own Quick Keys radial is the wheel; this plugin manages what stands behind its eight slots
 -- (two wheels - Magic and Equipment - five entries a slot, RB use / LB remove, D-pad wheels, triggers entries; the
--- owner's rulings 2026-09-26 and 2026-09-29). No menu and no drawing of its own.
+-- owner's rulings 2026-09-26 and 2026-09-29), and a small ammo wheel of its own for a held bow (MinHook: the TES-thread
+-- queue its equips run on, from Simple Loadout System).
 -- rule 45: no build-machine paths in any compiled object - set BEFORE includes() so CommonLibOB64's own library
 -- target gets it too (a std::source_location in an OBSE header reached through the PCH's absolute -FI path).
 -- /d1trimfile strips the project folder from __FILE__ and std::source_location. The flag is wrapped in a TABLE so
@@ -20,7 +21,7 @@ set_languages("c++23")
 set_warnings("allextra")
 
 add_rules("mode.debug", "mode.releasedbg")
-add_requires("nlohmann_json")
+add_requires("minhook", "nlohmann_json")
 add_rules("plugin.vsxmake.autoupdate")
 
 target("ImprovedWheelMenu")
@@ -30,7 +31,7 @@ target("ImprovedWheelMenu")
         description = "Improved Wheel Menu - the Quick Keys radial, augmented (Oblivion Remastered)"
     })
     add_syslinks("user32")
-    add_packages("nlohmann_json")
+    add_packages("minhook", "nlohmann_json")
     on_load(function (target)
         target:add("defines", "IWM_VERSION=\"" .. (target:version() or "0.0.0") .. "\"")
     end)

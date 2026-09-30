@@ -7,6 +7,7 @@
 #include "Rows.h"
 #include "Tool.h"
 #include "Settings.h"
+#include "TesThread.h"
 #include "Wheels.h"
 
 namespace
@@ -30,11 +31,11 @@ namespace
 			"Improved Wheel Menu {} self-check\n"
 			"widget class found: {}\nview model found: {}\nquick keys watch: {}\n"
 			"radial open now: {}\nmenu panel open now: {}\npointed slot: {} ({})\nlast chosen slot: {} ({})\nopens this session: {}\n"
-			"controller rules: {} (reads {}, rewritten {}, chained after {})\nmenu now: {}\nactive wheel: {}\nmenu rows: {}\nwheels: {}\nproblem: {}\n",
+			"controller rules: {} (reads {}, rewritten {}, chained after {})\nmenu now: {}\nactive wheel: {}\nmenu rows: {}\nwheels: {}\ntes thread queue: {}\nproblem: {}\n",
 			IWM_VERSION, s.widgetClassFound ? "yes" : "no", s.viewModelFound ? "yes" : "no", s.hookInstalled ? "installed" : "NOT installed",
 			s.open ? "yes" : "no", s.panelOpen ? "yes" : "no", s.pointedSlot, SlotWord(s.pointedSlot), s.lastChosenSlot, SlotWord(s.lastChosenSlot), s.opens,
 			p.installed ? "installed" : "NOT installed", p.reads, p.rewritten, p.previousTarget.empty() ? "-" : p.previousTarget,
-			menus::Name(menus::Active()), wheels::Name(wheels::Active()), rows::Status(), wheels::Status(), s.problem.empty() ? "none" : s.problem);
+			menus::Name(menus::Active()), wheels::Name(wheels::Active()), rows::Status(), wheels::Status(), testhread::Installed() ? "installed" : "NOT installed", s.problem.empty() ? "none" : s.problem);
 		FILE* f = nullptr;
 		if (_wfopen_s(&f, path.c_str(), L"wb") == 0 && f) {
 			std::fwrite(text.data(), 1, text.size(), f);
@@ -82,6 +83,7 @@ namespace
 			static auto next = std::chrono::steady_clock::now();
 			static bool reported = false;
 			static bool toolRegistered = false;
+			static bool tesThreadTried = false;
 			const auto now = std::chrono::steady_clock::now();
 			if (now < next) {
 				return;
@@ -92,6 +94,12 @@ namespace
 			rows::Tick();
 			if (!toolRegistered) {
 				toolRegistered = tool::Register();
+			}
+			if (!tesThreadTried) {
+				tesThreadTried = true;   // once: the ammo wheel's equips run on the TES thread (TesThread.h)
+				if (!testhread::Install()) {
+					logger::error("the TES thread queue is not installed - the ammo wheel opens but cannot equip");
+				}
 			}
 			if (!reported && quickkeys::GetStatus().hookInstalled) {
 				reported = true;

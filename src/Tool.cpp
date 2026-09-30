@@ -2,6 +2,7 @@
 // handed to the game thread (tool::Pump, from the controller read) and waited for.
 #include "Tool.h"
 
+#include "Ammo.h"
 #include "Inventory.h"
 #include "Menus.h"
 #include "Pad.h"
@@ -86,6 +87,7 @@ namespace tool
 				drawn += i ? 1 : 0;
 			}
 			j["pictures_drawn"] = drawn;
+			j["ammo_wheel"] = ammo::State();
 			return j;
 		}
 

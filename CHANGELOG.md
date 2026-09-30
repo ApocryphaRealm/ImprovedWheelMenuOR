@@ -5,6 +5,22 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### Added
+- the ammo wheel (the owner, 2026-09-29): a half wheel of up to eight arrow kinds locked to the middle of the right-hand
+  edge, opened with D-pad right while a bow is held, in gameplay only ("It would default to D-pad right while holding a
+  bow"). The right stick or D-pad up / down points (it opens on the arrows worn now, drawn gold); D-pad right again or A
+  equips the pointed arrows, B closes without. The equip runs on the TES thread (TesThread.cpp, from Simple Loadout
+  System - the equipment path traps every other thread) with no lock. `[AmmoWheel] bEnabled / uButton / uScalePercent`.
+  Built from the owner's description; Wheeler Refined's ammo wheel source is GPL-3.0-only and was not read (rule 62).
+  Its Controls-page row comes with the next round - the button is an INI setting until then.
+- Y on arrows in the inventory puts them on the ammo wheel, never the Equipment wheel, and arrows already on the
+  Equipment wheel (or put on a key by the game's own assign) move over, taking the game's key with them, and the
+  radial's pictures are patched so nothing stale is left on it. Each wheel holds only its own kind: items, spells, arrows.
+  Favourited arrows cannot be dropped or sold, as other favourites.
+- the centre rest snap (the owner: "we'd have to add the center rest snap feature or you might select items
+  mistakenly"): on the HUD radial and the ammo wheel, once the right stick has pointed, bringing it back to rest in the
+  middle for `uRestSnapMs` (150 ms) points at no slot, so letting go then uses nothing. `[Wheel] bCentreRestSnap`.
+
 ### Changed
 - taking an item off the wheel the normal way unfavourites it (the owner, 2026-09-29: "I didn't press Y to unfavorite
   the item. I just removed the item from the wheel the normal way. Which should be considered going forward."). A removal

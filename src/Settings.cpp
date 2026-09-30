@@ -37,8 +37,14 @@ namespace settings
 		if (std::filesystem::exists(ini)) {
 			v.logLevel = ReadInt(ini, L"Log", L"uLogLevel", v.logLevel, 0, 4);
 			v.entriesPerSlot = ReadInt(ini, L"Wheel", L"uEntriesPerSlot", v.entriesPerSlot, 1, 16);
+			v.centreRestSnap = ReadInt(ini, L"Wheel", L"bCentreRestSnap", v.centreRestSnap, 0, 1) != 0;
+			v.restSnapMs = ReadInt(ini, L"Wheel", L"uRestSnapMs", v.restSnapMs, 30, 1000);
+			v.ammoWheel = ReadInt(ini, L"AmmoWheel", L"bEnabled", v.ammoWheel, 0, 1) != 0;
+			v.ammoButton = ReadInt(ini, L"AmmoWheel", L"uButton", v.ammoButton, 0, 0xFFFF);
+			v.ammoScalePercent = ReadInt(ini, L"AmmoWheel", L"uScalePercent", v.ammoScalePercent, 50, 200);
 			g_values = v;
-			logger::info("settings: {} read (uLogLevel={}, uEntriesPerSlot={})", ini.string(), v.logLevel, v.entriesPerSlot);
+			logger::info("settings: {} read (uLogLevel={}, uEntriesPerSlot={}, bCentreRestSnap={}, uRestSnapMs={}, ammo wheel {} on button 0x{:04X} at {}%)",
+				ini.string(), v.logLevel, v.entriesPerSlot, v.centreRestSnap, v.restSnapMs, v.ammoWheel ? "on" : "off", v.ammoButton, v.ammoScalePercent);
 		} else {
 			g_values = v;
 			logger::warn("settings: {} not found - compiled defaults in use (uLogLevel={}, uEntriesPerSlot={})", ini.string(), v.logLevel, v.entriesPerSlot);

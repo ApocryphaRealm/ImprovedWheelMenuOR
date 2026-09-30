@@ -1,9 +1,11 @@
 #include "Pad.h"
 
+#include "Ammo.h"
 #include "Inventory.h"
 #include "Menus.h"
 #include "QuickKeys.h"
 #include "Rows.h"
+#include "Settings.h"
 #include "Wheels.h"
 
 #include <Xinput.h>   // types and constants only - nothing is linked or loaded
@@ -95,6 +97,46 @@ namespace pad
 		bool g_swallowA = false;     // A was ours (the magic menu's panel): the game never sees it, until let go
 		bool g_swallowX = false;     // X (drop) on a favourite: the game never sees it, until let go
 
+		// the centre rest snap on the HUD radial (the owner, 2026-09-29: "we'd have to add the center rest snap feature or
+		// you might select items mistakenly"): once the right stick has pointed, bringing it back to rest in the middle for
+		// uRestSnapMs points at no slot, so letting go of the wheel button then uses nothing
+		constexpr double  kStickOn = 0.45, kStickRest = 0.25;
+		bool              g_radialWasOpen = false;
+		bool              g_radialAway = false;     // the stick has pointed since the last rest
+		bool              g_radialResting = true;
+		Clock::time_point g_radialRestSince{};
+
+		void RestSnap(const XINPUT_GAMEPAD& a_pad, Clock::time_point a_now)
+		{
+			const bool open = quickkeys::RadialOpen();
+			if (open != g_radialWasOpen) {
+				g_radialWasOpen = open;
+				g_radialAway = false;
+				g_radialResting = true;
+				g_radialRestSince = a_now;
+			}
+			if (!open || !settings::Get().centreRestSnap) {
+				return;
+			}
+			const double m = std::hypot(a_pad.sThumbRX / 32767.0, a_pad.sThumbRY / 32767.0);
+			if (m >= kStickOn) {
+				g_radialAway = true;
+				g_radialResting = false;
+			} else if (m < kStickRest) {
+				if (!g_radialResting) {
+					g_radialResting = true;
+					g_radialRestSince = a_now;
+				}
+				if (g_radialAway && a_now - g_radialRestSince >= std::chrono::milliseconds(settings::Get().restSnapMs)) {
+					g_radialAway = false;
+					if (quickkeys::PointedSlot() >= 1) {
+						quickkeys::CancelChoice();
+						logger::info("pad: the right stick came back to rest - the wheel points at no slot (centre rest snap)");
+					}
+				}
+			}
+		}
+
 		// The wheel (HUD radial and menu panels alike) numbers its slots 1-8 as drawn, 1 at the top: key = number - 1
 		// (read 2026-09-29: pointing at the game's key 0 reported 1, key 7 reported 8; 0 / -1 = none)
 		int PointedKey()
@@ -153,7 +195,12 @@ namespace pad
 			}
 			WORD out = raw;
 
-			if (menu != menus::Menu::kNone) {
+			// the ammo wheel (a bow held, its button in gameplay): while it is open it takes the read (Ammo.cpp)
+			const bool ammoTook = ammo::Rewrite(a_pad, raw, pressed, out, menu == menus::Menu::kNone && !menus::AnyOpen(), quickkeys::RadialOpen());
+
+			if (ammoTook) {
+				// the D-pad, A, B and the right stick were the ammo wheel's
+			} else if (menu != menus::Menu::kNone) {
 				// ---- the inventory / magic menu ----
 				out &= ~XINPUT_GAMEPAD_Y;
 				if (pressed & XINPUT_GAMEPAD_Y) {
@@ -248,6 +295,9 @@ namespace pad
 				if (((raw & XINPUT_GAMEPAD_DPAD_DOWN) && !g_suppressDown) || g_latched) {
 					out |= XINPUT_GAMEPAD_DPAD_DOWN;
 				}
+				if (!quickkeys::RadialOpen()) {
+					RestSnap(a_pad, now);   // only notes that it closed
+				}
 				if (quickkeys::RadialOpen() && (pressed & XINPUT_GAMEPAD_B)) {
 					// B backs out: nothing is used, the wheel closes
 					quickkeys::CancelChoice();
@@ -258,6 +308,7 @@ namespace pad
 					out &= ~XINPUT_GAMEPAD_DPAD_DOWN;
 					logger::info("pad: B on the wheel - closed without using a slot");
 				} else if (quickkeys::RadialOpen()) {
+					RestSnap(a_pad, now);
 					const int slot = PointedKey();
 					out &= ~(XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_LEFT_SHOULDER | XINPUT_GAMEPAD_RIGHT_SHOULDER);
 					if (pressed & XINPUT_GAMEPAD_DPAD_LEFT) { wheels::SwitchWheel(-1); }
