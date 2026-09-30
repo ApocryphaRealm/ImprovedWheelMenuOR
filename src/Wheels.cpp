@@ -242,13 +242,39 @@ namespace wheels
 			}
 		}
 
+		// The Magic wheel is a wheel of its own (the owner, 2026-09-30: "the magic menu wheel is a distinct separate wheel
+		// from the inventory wheel. And just like the inventory wheel, even if it's empty, it's still visible and it still
+		// draws. It would just be empty"). The widget's own SetQuickKeyByIndex keeps the old picture when given none, so an
+		// empty Magic slot went on showing the inventory wheel's item. The Magic wheel is therefore written into the wheel's
+		// VIEW MODEL (SetIcons), where the game's own drawing shows an empty key as empty; the game's eight pictures are kept
+		// and put back when the Magic wheel leaves the screen.
+		quickkeys::Icons       g_gameIcons{};
+		bool                   g_haveGameIcons = false;
+		std::chrono::steady_clock::time_point g_nextMagicCheck{};
+
+		void WriteMagic(bool a_force)
+		{
+			const auto want = MagicIcons();
+			const auto now = std::chrono::steady_clock::now();
+			if (!a_force && now < g_nextMagicCheck) {
+				return;
+			}
+			g_nextMagicCheck = now + 100ms;
+			// the game pushes its own pictures just after a wheel opens: whenever the view model is not the Magic wheel's,
+			// it is written again (only then - each write redraws, and every redrawn slot clicks)
+			if (a_force || quickkeys::ReadIcons() != want) {
+				quickkeys::WriteIcons(want);
+				g_shownKnown = false;   // the widgets now show the view model's pictures
+			}
+		}
+
 		void AssertMagic()
 		{
 			if (g_shown != Shown::kMagic) {
 				AssertEquipment();
 				return;
 			}
-			Draw(MagicIcons(), false);
+			WriteMagic(false);
 		}
 
 		void ShowMagic(bool a_on)
@@ -257,17 +283,29 @@ namespace wheels
 				return;
 			}
 			if (a_on) {
+				if (!g_haveGameIcons) {
+					g_gameIcons = quickkeys::ReadIcons();   // the game's own eight, put back when the Magic wheel leaves
+					g_haveGameIcons = true;
+				}
 				g_shown = Shown::kMagic;
-				const auto icons = MagicIcons();
-				Draw(icons, true);
-				int drawn = 0;
-				for (auto* i : icons) {
+				WriteMagic(true);
+				int drawn = 0, filled = 0;
+				for (const auto* i : MagicIcons()) {
 					drawn += i ? 1 : 0;
 				}
-				logger::info("wheels: the wheel shows the Magic wheel ({} of 8 slots with a picture)", drawn);
+				for (const Slot& slot : g_wheels[kMagic]) {
+					filled += slot.active >= 0 ? 1 : 0;
+				}
+				logger::info("wheels: the wheel shows the Magic wheel - {} of 8 slots hold a spell, {} with its picture known (the rest drawn empty)",
+					filled, drawn);
 			} else {
 				g_shown = Shown::kGame;
-				Draw(quickkeys::ReadIcons(), true);   // the game's own, from its untouched view model
+				if (g_haveGameIcons) {
+					quickkeys::WriteIcons(g_gameIcons);   // the game's own pictures back into the view model
+					g_haveGameIcons = false;
+				}
+				g_shownKnown = false;
+				Draw(quickkeys::ReadIcons(), true);
 				logger::info("wheels: the wheel shows the game's own keys again");
 			}
 		}

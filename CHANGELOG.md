@@ -6,6 +6,15 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: the magic menu showed the inventory wheel's pictures** (the owner: "I still don't see the magic wheel in the
+  magic inventory" - "the magic menu wheel is a distinct separate wheel from the inventory wheel. And just like the
+  inventory wheel, even if it's empty, it's still visible and it still draws. It would just be empty").
+  - Cause: the owner's Magic wheel is empty (0 entries), and the widget's own SetQuickKeyByIndex keeps the old picture
+    when given none, so every empty Magic slot went on showing the inventory wheel's item.
+  - Fix: the Magic wheel is now written into the wheel's view model (SetIcons), where the game's own drawing shows an
+    empty key as empty. It is written again whenever the game pushes its own pictures, and only then, because each
+    redraw clicks. The game's eight pictures are kept and written back when the Magic wheel leaves the screen.
+  - The log says how many Magic slots hold a spell and how many of those have their picture known.
 - **Fixed: iron arrows duplicated in the inventory** (the owner: "There seems to be a weird duplication bug with the
   iron arrows in the inventory"). Every close of the ammo wheel with A or its button equipped the pointed stack again,
   even when it was already worn: 40 whole-stack equips of the same iron arrows in one session. Arrows already worn are
