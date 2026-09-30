@@ -1,6 +1,8 @@
 #include "Wheels.h"
 
 #include "Inventory.h"
+#include "PEHook.h"
+#include "Reflect.h"
 #include "QuickKeys.h"
 #include "Rows.h"
 #include "Settings.h"
@@ -579,6 +581,31 @@ namespace wheels
 		}
 	}
 
+	namespace
+	{
+		std::chrono::steady_clock::time_point g_hudCheckAt{};
+		UE::UObject*                          g_hudIconBefore = nullptr;   // compared only
+
+		// the HUD's spell picture (VHUDMainViewModel.SpellIcon), read to learn whether it follows selectedSpell
+		UE::UObject* HudSpellIcon()
+		{
+			static auto* cls = UE::StaticFindObject<UE::UClass>(nullptr, nullptr, L"/Script/Altar.VHUDMainViewModel");
+			if (!cls || !reflect::Ok()) return nullptr;
+			const auto off = reflect::Offset(cls, "SpellIcon");
+			const auto vms = reflect::Instances(cls);
+			return off >= 0 && !vms.empty() ? *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(vms.front()) + off) : nullptr;
+		}
+
+		void CheckHud()
+		{
+			if (g_hudCheckAt == std::chrono::steady_clock::time_point{} || std::chrono::steady_clock::now() < g_hudCheckAt) return;
+			g_hudCheckAt = {};
+			auto* now = HudSpellIcon();
+			logger::info("wheels: the HUD's spell picture {} after the Magic wheel's choice ({})", now != g_hudIconBefore ? "CHANGED" : "did NOT change",
+				now ? pe::Utf8(now->GetFName().ToString()) : std::string("none"));
+		}
+	}
+
 	const char* Name(Wheel a_wheel)
 	{
 		return a_wheel == Wheel::kMagic ? "Magic" : a_wheel == Wheel::kAmmo ? "Ammo" : "Equipment";
@@ -742,6 +769,7 @@ namespace wheels
 
 	void Tick(bool a_assignHeld)
 	{
+		CheckHud();
 		AssertMagic();
 		if (!g_pending.on) {
 			return;
@@ -853,9 +881,18 @@ namespace wheels
 			logger::warn("wheels: Magic slot {} holds 0x{:08X}, which is not a spell now", a_slot + 1, slot.entries[slot.active]);
 			return;
 		}
+		// the SELECTED spell - the one the HUD shows and the cast button casts - is PlayerCharacter::selectedSpell (+0x8F0);
+		// SetCurrentSpell alone set the caster's current spell and left the HUD on the old one (the owner, 2026-09-30: "I
+		// selected a magic from the magic wheel, but the characters UI widget for their quick magic didn't change"). No
+		// reflected equip function exists (the primary's search): the field is set, and the HUD is read back half a second
+		// later to learn whether it follows by itself.
+		auto* before = player->selectedSpell;
+		player->selectedSpell = static_cast<RE::MagicItem*>(spell);
 		player->SetCurrentSpell(static_cast<RE::MagicItem*>(spell));
-		logger::info("wheels: Magic slot {} used - {} is now the spell cast (selected spell reads {})", a_slot + 1, rows::SpellName(spell->GetFormID()),
-			player->selectedSpell == static_cast<RE::MagicItem*>(spell) ? "it" : "something else");
+		logger::info("wheels: Magic slot {} used - {} is now the selected spell ({})", a_slot + 1, rows::SpellName(spell->GetFormID()),
+			before == static_cast<RE::MagicItem*>(spell) ? "it was already" : before ? "another spell was" : "none was");
+		g_hudCheckAt = std::chrono::steady_clock::now() + 500ms;
+		g_hudIconBefore = HudSpellIcon();
 	}
 
 	void PanelShown(menus::Menu a_menu)
