@@ -366,14 +366,16 @@ namespace quickkeys
 		return g_status.panelOpen;
 	}
 
-	bool AnyWheelVisible()
+	bool AnyWheelVisible() { return VisibleWheel() != nullptr; }
+
+	UE::UObject* VisibleWheel()
 	{
 		// the wheel widgets, found by a whole-array scan at most every 2 s and kept by their slots
 		static std::vector<reflect::Handle> s_known;
 		static ULONGLONG                    s_nextScan = 0;
 		auto* cls = g_widgetClass.load(std::memory_order_acquire);
 		if (!cls || !reflect::Ok()) {
-			return false;
+			return nullptr;
 		}
 		const ULONGLONG now = GetTickCount64();
 		if (now >= s_nextScan) {
@@ -390,10 +392,10 @@ namespace quickkeys
 			}
 			ui::Call c(w, L"IsVisible");
 			if (c && c.Run() && c.Get<bool>("ReturnValue")) {
-				return true;
+				return w;
 			}
 		}
-		return false;
+		return nullptr;
 	}
 
 	int PointedSlot()

@@ -1,6 +1,7 @@
 #include "Pad.h"
 
 #include "Ammo.h"
+#include "WheelName.h"
 #include "Inventory.h"
 #include "Menus.h"
 #include "QuickKeys.h"
@@ -234,6 +235,7 @@ namespace pad
 			WORD out = raw;
 
 			// the ammo wheel (a bow held, its button in gameplay): while it is open it takes the read (Ammo.cpp)
+			wheelname::Tick();   // "Inventory Wheel" / "Magic Wheel" over the wheel on screen
 			const bool ammoTook = ammo::Rewrite(a_pad, raw, pressed, out, menu == menus::Menu::kNone && !menus::AnyOpen(), quickkeys::RadialOpen());
 
 			if (ammoTook) {

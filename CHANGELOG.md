@@ -6,6 +6,16 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Added: the wheel's name over the wheel on screen**: "Inventory Wheel" or "Magic Wheel" over the HUD radial (the
+  active wheel) and over the inventory's and the magic menu's assign panels (the owner: "The wheel menus aren't named in
+  the inventory when they should be").
+  - The last session's log shows the magic menu's wheel WAS drawn as the Magic wheel ("0 of 8 slots hold a spell ... the
+    rest drawn empty"). An unnamed empty wheel read as "no Magic wheel" ("I still haven't seen the wheeler wheel for the
+    magic menu").
+  - The label is the game's own text prefab, placed from the wheel widget's cached geometry (Minimap Menu's compass
+    placement). It is checked ten times a second, and its world-context call is fault-guarded.
+- Still open, waiting on in-game reads: the favourites column (the list rows' widget layout), and keeping spells off
+  the inventory wheel (where the game stores a spell's own quick key has not been found yet).
 - **Changed: the ammo wheel divides the half circle evenly, every entry the same size** (the owner, testing 465ca21: "The
   iron and steel arrow overlap in the ammo wheel, and there are different sizes too, which is weird. It should be dividing
   up the circumference evenly not pushing them both into the center").
