@@ -6,6 +6,15 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: iron arrows duplicated in the inventory** (the owner: "There seems to be a weird duplication bug with the
+  iron arrows in the inventory"). Every close of the ammo wheel with A or its button equipped the pointed stack again,
+  even when it was already worn: 40 whole-stack equips of the same iron arrows in one session. Arrows already worn are
+  now left alone, and every real equip logs the stack's data lists afterwards (how many, how many worn, their counts), so
+  a split stack shows in the log. A stack already split in this save may need a reload.
+- **Fixed: the arrows sat partly off screen on the ammo wheel** (the owner: "the arrows appear slightly off screen in
+  the arrow ammo wheel"). The eight arrows were spread over the whole half circle, so the top and bottom ones touched
+  the screen's edge. They now sit on the arc from 112.5 to 247.5 degrees, at 62% of the radius, and the right stick
+  picks the nearest arrow on that arc.
 - **Changed: the wheels stand down while the Apocrypha Menu Framework's window is open** (the owner: treat it like the
   game's own wheel, apart from the bow condition). IWM reads the pad on the game's import before the framework's gate
   hides it from the game, so D-pad down and D-pad right still opened the wheels with the framework's window up. IWM now

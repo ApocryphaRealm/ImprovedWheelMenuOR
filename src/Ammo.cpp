@@ -89,10 +89,16 @@ namespace ammo
 		double Radius() { return 230.0 * settings::Get().ammoScalePercent / 100.0; }
 
 		// where arrow i sits: on the left half of a circle centred on the middle of the right-hand edge, the top one first
+		// the arc the arrows sit on: 112.5 to 247.5 degrees (straight up is 90), so the top and bottom arrows stay clear
+		// of the screen's edge (the owner, 2026-09-30: "the arrows appear slightly off screen in the arrow ammo wheel" -
+		// spread over the whole half circle, the end ones sat on the edge)
+		constexpr double kArcFrom = 112.5, kArcTo = 247.5;
+		double SlotAngle(int a_i) { return kArcFrom + a_i * (kArcTo - kArcFrom) / (kSlots - 1); }
+
 		std::array<double, 2> Place(int a_i)
 		{
-			const double R = Radius(), r = R * 0.68;
-			const double th = (90.0 + (a_i + 0.5) * 180.0 / kSlots) * std::numbers::pi / 180.0;
+			const double R = Radius(), r = R * 0.62;
+			const double th = SlotAngle(a_i) * std::numbers::pi / 180.0;
 			return { R + r * std::cos(th), R - r * std::sin(th) };
 		}
 
@@ -294,11 +300,40 @@ namespace ammo
 				if (!player || !items) {
 					return;
 				}
+				// the arrows' extra data lists: how many, how many worn, and the counts they carry (a duplicated stack shows here)
+				const auto lists = [](RE::ItemChange* a_item) {
+					int n = 0, worn = 0;
+					std::string counts;
+					if (a_item->extraData) {
+						for (RE::ExtraDataList* xl : *a_item->extraData) {
+							if (!xl) continue;
+							++n;
+							worn += Worn(xl) ? 1 : 0;
+							// ExtraCount (0x2A): its count right after the BSExtraData header, as ExtraQuickKey's key at +0x18 (Inventory.cpp)
+							const auto* c = reinterpret_cast<const std::uint8_t*>(xl->GetExtraData(RE::EXTRA_DATA_TYPE::Count));
+							const int   cnt = c ? *reinterpret_cast<const std::int16_t*>(c + 0x18) : 1;
+							counts += std::format("{}{}{}", counts.empty() ? "" : ",", cnt, Worn(xl) ? "w" : "");
+						}
+					}
+					return std::format("{} list(s), {} worn [{}]", n, worn, counts);
+				};
 				for (RE::ItemChange* item : *items) {
 					if (item && item->object && item->object->GetFormID() == a_id && item->count > 0) {
+						// already worn: nothing to do. Every open of the wheel used to equip the stack again (40 equips of the
+						// same iron arrows in one session) and the owner saw the arrows duplicated in the inventory (2026-09-30)
+						bool worn = false;
+						if (item->extraData) {
+							for (RE::ExtraDataList* xl : *item->extraData) {
+								worn = worn || Worn(xl);
+							}
+						}
+						if (worn) {
+							logger::info("ammo: {} are worn already - nothing equipped ({})", inventory::NameOf(a_id), lists(item));
+							return;
+						}
 						// arrows are worn as the whole stack; no lock (EquipObject's last argument is the console's NoUnequip)
 						player->EquipObject(item->object, item->count, nullptr, false, false);
-						logger::info("ammo: {} x{} equipped (TES thread)", inventory::NameOf(a_id), item->count);
+						logger::info("ammo: {} x{} equipped (TES thread) - now {}", inventory::NameOf(a_id), item->count, lists(item));
 						return;
 					}
 				}
@@ -326,11 +361,17 @@ namespace ammo
 			if (th < 0) {
 				th += 360.0;
 			}
-			int i = 0;
-			if (th >= 90.0 && th <= 270.0) {
-				i = std::clamp(static_cast<int>((th - 90.0) / (180.0 / kSlots)), 0, kSlots - 1);
-			} else {
-				i = a_y >= 0 ? 0 : kSlots - 1;   // pointed right, off the wheel: the nearer end
+			if (th < 90.0 || th > 270.0) {
+				th = a_y >= 0 ? kArcFrom : kArcTo;   // pointed right, off the wheel: the nearer end
+			}
+			int    i = 0;
+			double best = 1e9;
+			for (int k = 0; k < kSlots; ++k) {   // the slot whose angle is nearest
+				const double d = std::abs(th - SlotAngle(k));
+				if (d < best) {
+					best = d;
+					i = k;
+				}
 			}
 			for (int d = 0; d < kSlots; ++d) {
 				if (i - d >= 0 && g_ids[i - d]) {
