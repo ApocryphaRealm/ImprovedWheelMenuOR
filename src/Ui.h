@@ -77,6 +77,15 @@ namespace ui
 	void         SetMidScalar(UE::UObject* a_mid, const wchar_t* a_name, float a_v);
 	void         SetMidTexture(UE::UObject* a_mid, const wchar_t* a_name, UE::UObject* a_texture);
 
+	// a widget by its name anywhere under a user widget - its tree, panels' slots and nested user widgets' trees - found
+	// by walking them and comparing names here (GetWidgetFromName found nothing in game, 2026-09-30)
+	UE::UObject* FindInTree(UE::UObject* a_userWidget, std::string_view a_name);
+
+	// the widget and every widget above it visible and not faded out (a parent collapsing hides it too)
+	bool         ShownOnScreen(UE::UObject* a_widget);
+	// a_obj inside a_ancestor (its outer chain)
+	bool         IsWithin(UE::UObject* a_obj, UE::UObject* a_ancestor);
+
 	// the brush drawn as a rounded box (a_circle: half-height radius) with a fill and an outline colour
 	bool RoundedBox(UE::UObject* a_image, bool a_circle, const float a_fill[4], const float a_outline[4], float a_width);
 }

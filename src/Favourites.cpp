@@ -118,6 +118,7 @@ namespace favourites
 			static auto* overlayClass = ui::Class(L"/Script/UMG.Overlay");
 			auto* horizontal = Prop(a_row, "inv_entry_horizontal");
 			if (!horizontal) horizontal = ui::ChildNamed(a_row, L"inv_entry_horizontal");
+			if (!horizontal) horizontal = ui::FindInTree(a_row, "inv_entry_horizontal");
 			auto* tree = Prop(a_row, "WidgetTree");
 			if (!overlayClass || !horizontal || !tree) {
 				static bool logged = false;

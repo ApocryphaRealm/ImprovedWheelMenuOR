@@ -390,8 +390,7 @@ namespace quickkeys
 			if (!w) {
 				continue;
 			}
-			ui::Call c(w, L"IsVisible");
-			if (c && c.Run() && c.Get<bool>("ReturnValue")) {
+			if (ui::ShownOnScreen(w)) {   // itself AND every parent (the magic menu hides the panel through a parent)
 				return w;
 			}
 		}

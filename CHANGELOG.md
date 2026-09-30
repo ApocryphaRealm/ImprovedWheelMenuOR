@@ -6,6 +6,15 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### Round 3 (in progress, 2026-09-30)
+- **Fixed: the Magic wheel never drew, and the favourites column never appeared** (the owner's screenshots of 03:38:40
+  and 03:38:46: the magic menu's wheel still showed a bow, a sword, a torch; the log: "the game's wheel picture is NOT
+  FOUND (quickKeys_material)", "a row has no inv_entry_horizontal - no column"). GetWidgetFromName found neither widget
+  in game. Both are now also found by walking the widget trees ourselves - each user widget's WidgetTree root, every
+  panel's Slots[].Content, nested user widgets' trees - and comparing names in the plugin (ui::FindInTree).
+- **Fixed: "Magic Wheel" stayed over the magic menu after its wheel panel was hidden** (the owner: "after you hide
+  the wheel menu, the title of it still stays"). The panel is hidden through a parent, so the wheel's own IsVisible
+  stayed true and the panel read as up again 0.1 s after B closed it. A wheel now counts as on screen only when it and
+  every widget above it is visible and not faded out (ui::ShownOnScreen).
 - **Added: the favourites column in the inventory** (the owner: "I still don't see the favorites column in the inventory
   interface ... Maybe we can build it just like we did the buttons for the SLS mod", and "each item have a button. In
   its column with an empty star shape then the star shape gets filled to be white whenever it's favorited").

@@ -1,5 +1,6 @@
 #include "Ui.h"
 
+#include "PEHook.h"
 #include "Reflect.h"
 
 namespace ui
@@ -347,5 +348,103 @@ namespace ui
 		c.Set("ParameterName", UE::FName(a_name, UE::EFindName::Add));
 		c.Set("Value", a_texture);
 		c.Run();
+	}
+}
+
+namespace ui
+{
+	// on screen for real: the widget and every widget above it visible (not Collapsed / Hidden) and not faded out - the
+	// magic menu hides its wheel panel through a parent, so the wheel's own IsVisible stayed true after it was hidden
+	// (the owner, 2026-09-30: "after you hide the wheel menu, the title of it still stays")
+	bool ShownOnScreen(UE::UObject* a_widget)
+	{
+		static auto* widgetClass = Class(L"/Script/UMG.Widget");
+		static auto* treeClass = Class(L"/Script/UMG.WidgetTree");
+		static auto* slotClass = Class(L"/Script/UMG.PanelSlot");
+		const auto slotOff = widgetClass && reflect::Ok() ? reflect::Offset(reinterpret_cast<UE::UStruct*>(widgetClass), "Slot") : -1;
+		const auto parentOff = slotClass && reflect::Ok() ? reflect::Offset(reinterpret_cast<UE::UStruct*>(slotClass), "Parent") : -1;
+		UE::UObject* w = a_widget;
+		for (int depth = 0; w && depth < 40; ++depth) {
+			Call vis(w, L"IsVisible");
+			if (!vis) {
+				return depth > 0;   // above the widgets: the game instance or a viewport owner - shown so far
+			}
+			if (!vis.Run() || !vis.Get<bool>("ReturnValue")) return false;
+			if (RenderOpacity(w) < 0.05f) return false;
+			UE::UObject* next = nullptr;
+			auto* slot = slotOff >= 0 ? *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(w) + slotOff) : nullptr;
+			if (slot && parentOff >= 0) {
+				next = *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(slot) + parentOff);
+			}
+			if (!next) {
+				// a tree's root widget: the user widget that owns the tree (outer of its WidgetTree)
+				auto* outer = w->GetOuter();
+				next = outer && treeClass && outer->GetClass() == treeClass ? outer->GetOuter() : nullptr;
+			}
+			w = next;
+		}
+		return true;
+	}
+
+	bool IsWithin(UE::UObject* a_obj, UE::UObject* a_ancestor)
+	{
+		for (auto* o = a_obj; o; o = o->GetOuter()) {
+			if (o == a_ancestor) return true;
+		}
+		return false;
+	}
+}
+
+namespace ui
+{
+	namespace
+	{
+		UE::UObject* PropObj(UE::UObject* a_o, UE::UClass* a_declaring, std::string_view a_name)
+		{
+			const auto off = a_o && a_declaring && reflect::Ok() ? reflect::Offset(reinterpret_cast<UE::UStruct*>(a_declaring), a_name) : -1;
+			return off >= 0 ? *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(a_o) + off) : nullptr;
+		}
+
+		bool IsA(UE::UObject* a_o, UE::UClass* a_class)
+		{
+			for (auto* c = a_o ? static_cast<UE::UStruct*>(a_o->GetClass()) : nullptr; c; c = c->superStruct) {
+				if (c == reinterpret_cast<UE::UStruct*>(a_class)) return true;
+			}
+			return false;
+		}
+
+		UE::UObject* Search(UE::UObject* a_w, std::string_view a_name, int a_depth)
+		{
+			static auto* userWidget = Class(L"/Script/UMG.UserWidget");
+			static auto* panelWidget = Class(L"/Script/UMG.PanelWidget");
+			static auto* treeClass = Class(L"/Script/UMG.WidgetTree");
+			static auto* panelSlot = Class(L"/Script/UMG.PanelSlot");
+			if (!a_w || a_depth > 24) return nullptr;
+			if (a_depth > 0 && pe::Utf8(a_w->GetFName().ToString()) == a_name) return a_w;
+			if (IsA(a_w, userWidget)) {   // a user widget: into its own tree
+				auto* tree = PropObj(a_w, userWidget, "WidgetTree");
+				auto* root = tree ? PropObj(tree, treeClass, "RootWidget") : nullptr;
+				if (auto* found = root ? (pe::Utf8(root->GetFName().ToString()) == a_name ? root : Search(root, a_name, a_depth + 1)) : nullptr) return found;
+			}
+			if (IsA(a_w, panelWidget)) {   // a panel: into each slot's content
+				const auto slotsOff = reflect::Ok() ? reflect::Offset(reinterpret_cast<UE::UStruct*>(panelWidget), "Slots") : -1;
+				if (slotsOff < 0) return nullptr;
+				struct RawArray { UE::UObject** data; std::int32_t num; std::int32_t max; };
+				const auto* arr = reinterpret_cast<const RawArray*>(reinterpret_cast<const std::uint8_t*>(a_w) + slotsOff);
+				for (std::int32_t i = 0; arr->data && i < arr->num && i < 256; ++i) {
+					auto* content = PropObj(arr->data[i], panelSlot, "Content");
+					if (!content) continue;
+					if (pe::Utf8(content->GetFName().ToString()) == a_name) return content;
+					if (auto* found = Search(content, a_name, a_depth + 1)) return found;
+				}
+			}
+			// content widgets with one child (SizeBox, Border...) are panels too; nothing else holds children
+			return nullptr;
+		}
+	}
+
+	UE::UObject* FindInTree(UE::UObject* a_userWidget, std::string_view a_name)
+	{
+		return Search(a_userWidget, a_name, 0);
 	}
 }
