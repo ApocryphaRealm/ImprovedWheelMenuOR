@@ -6,6 +6,7 @@
 #include "QuickKeys.h"
 #include "Rows.h"
 #include "Settings.h"
+#include "Ui.h"
 
 #include <fstream>
 #include <unordered_map>
@@ -953,6 +954,41 @@ namespace wheels
 			return off >= 0 && !vms.empty() ? *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(vms.front()) + off) : nullptr;
 		}
 
+		// The HUD's spell picture after a Magic wheel choice. Setting selectedSpell does not reach the HUD: the magic menu's
+		// own pick makes the game write VHUDMainViewModel.SpellIcon natively and broadcast the field's change, and the HUD's
+		// binding then calls GetSpellIcon once (probe B, 2026-10-01: OnItemClicked, then GetSpellIcon x1 and nothing else
+		// spell-related on the HUD; every Magic wheel pick logged "did NOT change"). The same, from here: the spell's icon
+		// written into SpellIcon, then MVVMViewModelBase's K2_BroadcastFieldValueChanged for "SpellIcon" (the HUD's view
+		// models are VViewModelBase -> MVVMViewModelBase).
+		void PushHudSpellIcon(std::uint32_t a_formID)
+		{
+			static auto* cls = UE::StaticFindObject<UE::UClass>(nullptr, nullptr, L"/Script/Altar.VHUDMainViewModel");
+			static auto* texCls = ui::Class(L"/Script/Engine.Texture2D");
+			if (!cls || !texCls || !reflect::Ok()) {
+				logger::warn("wheels: the HUD's spell picture cannot be set (view model class {}, Texture2D {})", cls ? "found" : "missing", texCls ? "found" : "missing");
+				return;
+			}
+			const auto off = reflect::Offset(cls, "SpellIcon");
+			const auto vms = reflect::Instances(cls);
+			auto*      icon = rows::SpellIcon(a_formID);
+			if (off < 0 || vms.empty() || !icon || !icon->GetClass()->IsChildOf(texCls)) {
+				logger::info("wheels: the HUD's spell picture left as it is (SpellIcon at {}, {} view model(s), icon {})", off, vms.size(),
+					!icon ? std::string("none") : pe::Utf8(icon->GetClass()->GetFName().ToString()));
+				return;
+			}
+			auto* vm = vms.front();
+			*reinterpret_cast<UE::UObject**>(reinterpret_cast<std::uint8_t*>(vm) + off) = icon;
+			ui::Call broadcast(vm, L"K2_BroadcastFieldValueChanged");
+			void* id = broadcast ? broadcast.At("FieldId") : nullptr;
+			if (!id) {
+				logger::warn("wheels: SpellIcon written, but the view model has no K2_BroadcastFieldValueChanged(FieldId) - the HUD keeps its picture until the game asks again");
+				return;
+			}
+			new (id) UE::FName(L"SpellIcon", UE::EFindName::Add);   // FFieldNotificationId { FName FieldName }
+			broadcast.Run();
+			logger::info("wheels: the HUD's spell picture set to {} and its change broadcast", pe::Utf8(icon->GetFName().ToString()));
+		}
+
 		void CheckHud()
 		{
 			if (g_hudCheckAt == std::chrono::steady_clock::time_point{} || std::chrono::steady_clock::now() < g_hudCheckAt) return;
@@ -1336,6 +1372,7 @@ namespace wheels
 			before == static_cast<RE::MagicItem*>(spell) ? "it was already" : before ? "another spell was" : "none was");
 		g_hudCheckAt = std::chrono::steady_clock::now() + 500ms;
 		g_hudIconBefore = HudSpellIcon();
+		PushHudSpellIcon(spell->GetFormID());
 	}
 
 	void PanelShown(menus::Menu a_menu)

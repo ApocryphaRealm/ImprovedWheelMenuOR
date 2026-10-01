@@ -6,6 +6,10 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### 2026-10-01 (build only, primary session)
+- **Fixed (untested): the HUD's spell picture now follows a Magic wheel choice.** Probe B showed the magic menu's pick
+  ends with the game writing VHUDMainViewModel.SpellIcon and broadcasting the change (the HUD calls GetSpellIcon once);
+  the wheel only set selectedSpell. The wheel now writes the spell's icon into SpellIcon and calls
+  K2_BroadcastFieldValueChanged("SpellIcon"); the half-second read-back logs whether the picture CHANGED.
 - **Fixed: the magic menu's wheel panel read as showing the moment the menu opened** (06ecaa8), so every A went to
   assigning Magic slot 1 and the owner's slots were rearranged. Probe A showed why: the panel (Magic_QuickKeys) shares a
   WidgetSwitcher with the description, and a switcher draws only its active child while every child reads visible; and
