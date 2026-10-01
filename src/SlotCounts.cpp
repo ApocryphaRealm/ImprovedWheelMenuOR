@@ -78,7 +78,7 @@ namespace slotcounts
 				ui::Vec2(label, L"SetRenderScale", kTextScale, kTextScale);
 				g_label[static_cast<std::size_t>(k)] = reflect::Hold(label);
 				g_slot[static_cast<std::size_t>(k)] = reflect::Hold(slot);
-				g_text[static_cast<std::size_t>(k)].clear();
+				g_text[static_cast<std::size_t>(k)] = "\x01";   // matches no real text: the first Show sets every label
 			}
 			ui::Call vp(root, L"AddToViewport");
 			vp.Set<std::int32_t>("ZOrder", 61);   // over the wheel and its name
@@ -120,12 +120,15 @@ namespace slotcounts
 			}
 			g_x = x, g_y = y, g_w = w;
 		}
-		// what: the shown entry's place among those LT / RT reach, "2/3" ("1/1" for one item); an empty slot shows nothing,
-		// a slot whose key holds none of its entries "-/N". Only the labels whose text changed are set.
+		// what: the shown entry's place out of the slot's places, "2/5" - the owner, 2026-10-01: "whether I'm on one out of
+		// five, two out of five ..." - and "0/5" for an empty slot ("slot number 3 and 1, which are actually empty, have no
+		// indicator at all of like zero out of five"); "-/5" when the slot's key holds none of its entries. Every label gets
+		// text: an empty string left two labels showing the widget's placeholder "Text Block" (slots 7 and 8).
 		const auto counts = wheels::SlotCounts(wheels::Wheel::kEquipment);
+		const int  cap = wheels::SlotCap();
 		for (int k = 0; k < 8; ++k) {
 			const auto& c = counts[static_cast<std::size_t>(k)];
-			const std::string text = c.count == 0 ? std::string() : c.position > 0 ? std::format("{}/{}", c.position, c.count) : std::format("-/{}", c.count);
+			const std::string text = c.count == 0 ? std::format("0/{}", cap) : c.position > 0 ? std::format("{}/{}", c.position, cap) : std::format("-/{}", cap);
 			if (text != g_text[static_cast<std::size_t>(k)]) {
 				if (auto* label = reflect::Get(g_label[static_cast<std::size_t>(k)])) SetText(label, text);
 				g_text[static_cast<std::size_t>(k)] = text;
