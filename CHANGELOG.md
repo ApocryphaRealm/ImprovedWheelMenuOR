@@ -6,6 +6,11 @@ in `git log`. A version number is issued by the version gate only once a build i
 ## Unreleased - 2026-09-29 - untested
 
 ### 2026-10-01 (build only, primary session)
+- **Fixed: the magic menu's wheel panel read as showing the moment the menu opened** (06ecaa8), so every A went to
+  assigning Magic slot 1 and the owner's slots were rearranged. Probe A showed why: the panel (Magic_QuickKeys) shares a
+  WidgetSwitcher with the description, and a switcher draws only its active child while every child reads visible; and
+  the widget blueprint's archetype was counted as a live panel. The on-screen check now asks the switcher for its active
+  child, and instance scans skip templates.
 - **Fixed: the reflection self-check no longer latches failure early in a launch.** A KeyIndex not found yet (the
   class exists before its property chain is linked) now means "ask again", as Tween Menu OR c4625c8 does; a failure is
   latched only for a property found at a wrong offset (gate rule or-reflect-selfcheck-never-latches-not-found; CCM went
