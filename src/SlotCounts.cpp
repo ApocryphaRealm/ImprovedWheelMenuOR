@@ -21,6 +21,7 @@ namespace slotcounts
 		std::array<std::string, 8> g_text;
 		int       g_builds = 0;
 		ULONGLONG g_lastBuild = 0, g_next = 0;
+		std::uint32_t g_gen = 0;   // wheels::Generation() at the last text update
 		bool      g_shown = false;
 		double    g_x = -1e9, g_y = -1e9, g_w = -1;
 
@@ -94,9 +95,13 @@ namespace slotcounts
 
 	void Show(UE::UObject* a_gameWheelImage)
 	{
+		// every 100 ms (the inventory walk is not free) - and at once whenever a wheel changed (Generation moves with
+		// every LT / RT step, assign and removal), so the counter follows LT / RT on the read after the press
 		const ULONGLONG now = GetTickCount64();
-		if (now < g_next) return;
+		const auto gen = wheels::Generation();
+		if (now < g_next && gen == g_gen) return;
 		g_next = now + 100;
+		g_gen = gen;
 		if (!reflect::Get(g_root) && !Build()) return;
 		auto* root = reflect::Get(g_root);
 		double x = 0, y = 0, w = 0, h = 0;
@@ -115,11 +120,12 @@ namespace slotcounts
 			}
 			g_x = x, g_y = y, g_w = w;
 		}
-		// what: only the labels whose count changed
+		// what: the shown entry's place among those LT / RT reach, "2/3" ("1/1" for one item); an empty slot shows nothing,
+		// a slot whose key holds none of its entries "-/N". Only the labels whose text changed are set.
 		const auto counts = wheels::SlotCounts(wheels::Wheel::kEquipment);
-		const int  cap = wheels::SlotCap();
 		for (int k = 0; k < 8; ++k) {
-			const std::string text = std::format("{}/{}", counts[static_cast<std::size_t>(k)], cap);
+			const auto& c = counts[static_cast<std::size_t>(k)];
+			const std::string text = c.count == 0 ? std::string() : c.position > 0 ? std::format("{}/{}", c.position, c.count) : std::format("-/{}", c.count);
 			if (text != g_text[static_cast<std::size_t>(k)]) {
 				if (auto* label = reflect::Get(g_label[static_cast<std::size_t>(k)])) SetText(label, text);
 				g_text[static_cast<std::size_t>(k)] = text;

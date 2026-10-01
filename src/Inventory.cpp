@@ -277,7 +277,7 @@ namespace inventory
 			auto* player = RE::PlayerCharacter::GetSingleton();
 			auto* item = Find(a_formID);
 			if (!player || !item || !item->object || item->count <= 0) {
-				logger::info("wheels: fallback equip - {} is not carried any more", NameOf(a_formID));
+				logger::info("wheels: equip - {} is not carried any more", NameOf(a_formID));
 				return;
 			}
 			// the instance carrying the quick key (an enchanted or damaged one is its own list), else the base item
@@ -292,7 +292,7 @@ namespace inventory
 			}
 			// no lock: EquipObject's last argument is the console's NoUnequip (gate rule or-equipobject-never-locks)
 			player->EquipObject(item->object, 1, keyed, false, false);
-			logger::info("wheels: fallback equip - {} equipped on the TES thread ({})", NameOf(a_formID), Describe(StateOf(a_formID)));
+			logger::info("wheels: equip - {} equipped on the TES thread ({})", NameOf(a_formID), Describe(StateOf(a_formID)));
 		});
 	}
 }

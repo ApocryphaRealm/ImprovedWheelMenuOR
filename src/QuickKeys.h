@@ -41,8 +41,12 @@ namespace quickkeys
 	UE::UObject* VisibleWheel();   // the first wheel widget whose own visibility says shown, or nullptr
 	int  PointedSlot();  // the slot under the pointer on whichever is showing, -1 for none
 	void CancelChoice(); // B on the HUD radial: the view model points at no slot, so the close uses nothing
-	// the centre rest snap: CancelChoice, and the wheel's own highlight cleared ("Update Key Index"(-1) on the widget)
+	// the centre rest snap: CancelChoice, the Blueprint's pointed key (QuickKeyID / CurrentScaledKeyID / HoveredKeyID)
+	// set to -1 and the selector arrow hidden (SelectorArrowAlpha 0 on the wheel's material). HoldCleared keeps the arrow
+	// hidden while the snap lasts (call every read); RestorePointer puts it back (the stick points again, or the wheel closed).
 	void ClearPointer();
+	void HoldCleared();
+	void RestorePointer(const char* a_why);
 	// the wheel points at key a_key (0-7) again - widget highlight and view model - when the stick came back to a slot
 	// after a rest snap and the game did not say so itself
 	void Repoint(int a_key);

@@ -39,6 +39,6 @@ namespace inventory
 	State StateOf(std::uint32_t a_formID);
 	std::string Describe(const State& a_state);       // "x1, worn" / "not carried"
 
-	// puts the item carrying quick key a_key on, on the TES thread (the fallback when the game's own use did nothing)
+	// puts the item on (its quick-keyed instance), on the TES thread: RB / A on the inventory wheel, at once
 	void EquipKeyed(std::uint32_t a_formID);
 }

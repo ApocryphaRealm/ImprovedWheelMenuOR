@@ -266,34 +266,102 @@ namespace quickkeys
 
 	namespace
 	{
-		std::int32_t BpInt(UE::UObject* a_widget, const char* a_name)
+		std::int32_t* BpIntField(UE::UObject* a_widget, const char* a_name)
 		{
 			const auto off = a_widget && reflect::Ok() ? reflect::Offset(a_widget->GetClass(), a_name) : -1;
-			return off >= 0 ? *reinterpret_cast<const std::int32_t*>(reinterpret_cast<const std::uint8_t*>(a_widget) + off) : -999;
+			return off >= 0 ? reinterpret_cast<std::int32_t*>(reinterpret_cast<std::uint8_t*>(a_widget) + off) : nullptr;
+		}
+
+		std::int32_t BpInt(UE::UObject* a_widget, const char* a_name)
+		{
+			const auto* f = BpIntField(a_widget, a_name);
+			return f ? *f : -999;
+		}
+
+		// The selector the wheel draws is two scalars on its picture's material instance (quickKeys_material > Image, a
+		// MaterialInstanceDynamic of MIC_UI_QuickKeys), read live 2026-10-01 on the HUD wheel: SelectorRotator (0.375 =
+		// slot 4 of 8, the bow last pointed) turns it and SelectorArrowAlpha (1.0) shows it. The slots' own IDn_Opacity /
+		// IDnTexture are the pictures.
+		constexpr const wchar_t* kArrowAlpha = L"SelectorArrowAlpha";
+		reflect::Handle g_snapMid;              // the material whose arrow the rest snap hid
+		float           g_snapAlpha = 1.0f;     // its arrow's alpha before the snap, put back when the stick points again
+		bool            g_snapHidden = false;
+
+		UE::UObject* WheelMid(UE::UObject* a_wheel)
+		{
+			auto* material = ui::ChildNamed(a_wheel, L"quickKeys_material");
+			if (!material) material = ui::FindInTree(a_wheel, "quickKeys_material");
+			auto* img = material ? ui::ChildNamed(material, L"Image") : nullptr;
+			if (!img && material) img = ui::FindInTree(material, "Image");
+			static auto* midClass = ui::Class(L"/Script/Engine.MaterialInstanceDynamic");
+			auto* mid = img ? ui::BrushResource(img) : nullptr;
+			return mid && midClass && mid->GetClass() == midClass ? mid : nullptr;
 		}
 	}
 
 	void ClearPointer()
 	{
 		CancelChoice();
-		// The view model's KeyIndex is only what the game reads; the wheel's highlight is the widget's own: its Blueprint
-		// keeps QuickKeyID / HoveredKeyID / CurrentScaledKeyID (read 2026-10-01 with ue.props) and draws the selector from
-		// "Update Key Index" (-> its UpdateFocusedKey, a scalar on the wheel's material). Writing KeyIndex = -1 left the
-		// slot lit (the owner, 2026-10-01: no centre rest snap visible on the inventory wheel). The game itself calls
-		// "Update Key Index"(-1) as the radial opens with nothing pointed - the same call clears it here. It passes through
-		// our watch, so PointedSlot follows (-1).
+		// The view model's KeyIndex is only what the game reads, and the game puts it back within a frame (2026-10-01
+		// 02:35:41.541 snap, 02:35:41.555 A read slot 2 again). "Update Key Index"(-1) on the widget changed nothing either
+		// ("QuickKeyID 1 -> 1 ... CurrentScaledKeyID 2 -> 2", every snap of 02:34-02:35). So, what the snap now does:
+		//   * the arrow goes: SelectorArrowAlpha = 0 on the wheel's material, held at 0 while the snap lasts (HoldCleared)
+		//     and put back as the stick points again (RestorePointer);
+		//   * the Blueprint's own pointed key is written to -1 (QuickKeyID, CurrentScaledKeyID, HoveredKeyID - -1 is the
+		//     value the Blueprint itself leaves them at between opens, read on the closed HUD wheel), so a stick that goes
+		//     back to the SAME slot is a change for it and the slot lights and grows again;
+		//   * our own pointed slot is held at none by the pad until the stick points again (Pad.cpp, PointedKey).
 		auto* w = VisibleWheel();
-		auto* fn = w ? w->FindFunction(UE::FName(L"Update Key Index", UE::EFindName::Find)) : nullptr;
-		if (!w || !fn) {
-			logger::info("quick keys: the wheel's highlight not cleared - {}", !w ? "no wheel on screen" : "the wheel has no 'Update Key Index'");
+		if (!w) {
+			logger::info("quick keys: rest snap - no wheel on screen, nothing more to clear");
 			return;
 		}
 		const auto q0 = BpInt(w, "QuickKeyID"), h0 = BpInt(w, "HoveredKeyID"), c0 = BpInt(w, "CurrentScaledKeyID");
-		std::array<std::uint8_t, 32> params{};
-		*reinterpret_cast<std::int32_t*>(params.data()) = -1;
-		w->ProcessEvent(fn, params.data());
-		logger::info("quick keys: the wheel's highlight cleared ('Update Key Index'(-1) on the wheel) - QuickKeyID {} -> {}, HoveredKeyID {} -> {}, CurrentScaledKeyID {} -> {}",
-			q0, BpInt(w, "QuickKeyID"), h0, BpInt(w, "HoveredKeyID"), c0, BpInt(w, "CurrentScaledKeyID"));
+		for (const char* name : { "QuickKeyID", "CurrentScaledKeyID", "HoveredKeyID" }) {
+			if (auto* f = BpIntField(w, name)) {
+				*f = -1;
+			}
+		}
+		auto* mid = WheelMid(w);
+		float before = -1.0f;
+		if (mid) {
+			before = ui::MidScalar(mid, kArrowAlpha);
+			if (!g_snapHidden || reflect::Get(g_snapMid) != mid) {
+				g_snapAlpha = before > 0.0f ? before : 1.0f;
+			}
+			ui::SetMidScalar(mid, kArrowAlpha, 0.0f);
+			g_snapMid = reflect::Hold(mid);
+			g_snapHidden = true;
+		}
+		logger::info("quick keys: rest snap cleared the wheel - QuickKeyID {} -> {}, HoveredKeyID {} -> {}, CurrentScaledKeyID {} -> {}; selector arrow {}",
+			q0, BpInt(w, "QuickKeyID"), h0, BpInt(w, "HoveredKeyID"), c0, BpInt(w, "CurrentScaledKeyID"),
+			mid ? std::format("alpha {:.2f} -> {:.2f} (SelectorRotator {:.3f})", before, ui::MidScalar(mid, kArrowAlpha), ui::MidScalar(mid, L"SelectorRotator"))
+				: std::string("NOT hidden - the wheel's material was not found"));
+	}
+
+	void HoldCleared()
+	{
+		if (!g_snapHidden) {
+			return;
+		}
+		auto* mid = reflect::Get(g_snapMid);
+		if (mid && ui::MidScalar(mid, kArrowAlpha) != 0.0f) {
+			ui::SetMidScalar(mid, kArrowAlpha, 0.0f);   // the Blueprint lit it again while the stick still rests
+		}
+	}
+
+	void RestorePointer(const char* a_why)
+	{
+		if (!g_snapHidden) {
+			return;
+		}
+		g_snapHidden = false;
+		auto* mid = reflect::Get(g_snapMid);
+		if (mid) {
+			ui::SetMidScalar(mid, kArrowAlpha, g_snapAlpha);
+		}
+		g_snapMid = {};
+		logger::info("quick keys: the selector arrow is back (alpha {:.2f}) - {}", g_snapAlpha, a_why);
 	}
 
 	void Repoint(int a_key)

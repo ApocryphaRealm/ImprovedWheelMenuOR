@@ -5,6 +5,45 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### Round 5 (2026-10-01) - four findings from the owner's session of 02:29-02:49 (adadfdd), built, not yet seen in game
+- **Fixed: the slot counter never changed while cycling** (the owner: "the numbers for which item I'm selecting isn't
+  changing whether I'm on one out of five, two out of five"). It drew the reachable count against the cap ("3/5"), which
+  LT / RT never change. It now shows the shown entry's place among the entries LT / RT can reach, out of that count -
+  "2/3", "1/1" for one item, nothing for an empty slot, "-/N" for a slot whose key holds none of its entries - and it is
+  redrawn on the read after any wheel change (the 100 ms throttle is skipped when wheels::Generation() moved; each LT / RT
+  step saves and moves it).
+- **Fixed: RB / A equipped 0.7 s late.** Every use logged "unchanged 0.7 s after the game's key press ... FALLBACK:
+  equipped through Actor::EquipObject" (9 of 9, 02:32:49-02:36:59) and the fallback worked every time ("(x1, worn)") -
+  `Quick<N>Input_Pressed / _Released` equips nothing. Equipment (weapon, shield, armour, clothing, torch) now goes on AT
+  ONCE through Actor::EquipObject on the TES thread (lock argument false), with no key press and no wait for the close; the
+  state is read back 300 ms later ("USE result ... equipped at once through Actor::EquipObject"). An item already worn is
+  left alone and logged ("already worn ... nothing done"): what the game's own quick key does with a worn item could not be
+  told from the code or the game, since the key press did nothing at all. Anything else on a key (potion, scroll) keeps the
+  old path - the game's key press after the close, unproven for those kinds. The bow seen not drawing for about 40 s after
+  02:36:59: the ammo wheel equipped arrows only at 02:37:07 (Iron x1) and 02:37:38 (Steel x32), and the pawn had the bow,
+  its WeaponActor and a QuiverForm - read as no arrows equipped, not the equip path; not proven.
+- **Fixed: the centre rest snap cleared nothing visible, and LT / RT / A after it still acted on the old slot.** Every snap
+  logged "'Update Key Index'(-1) ... QuickKeyID 1 -> 1, HoveredKeyID 0 -> 0, CurrentScaledKeyID 2 -> 2", and the game put
+  the view model's KeyIndex back within a frame (snap 02:35:41.541, "USE Equipment slot 2 (A)" at .555). Read live with
+  TestBench: the selector is two scalars on the wheel picture's material instance (quickKeys_material > Image, MIC_UI_QuickKeys)
+  - SelectorRotator (0.375 = slot 4) and SelectorArrowAlpha (1.0) - and the widget takes the stick itself
+  (InpActEvt_IA_UI_Specific_QuickKeys_RightStick, then Focus Key By Quick Key / UpdateFocusedKey / UpdateKeySelectorAngle /
+  PlayScaleUpAnimation). The snap now hides the arrow (SelectorArrowAlpha 0, held at 0 while the stick rests, put back when
+  it points again or the wheel closes), writes the Blueprint's QuickKeyID / CurrentScaledKeyID / HoveredKeyID to -1 (their
+  own value between opens), and our pointed slot stays none until the stick points again - whatever the game re-reports -
+  so LT / RT / RB / A after a snap act on nothing. The snap ends when the game's slot agrees with the stick's angle, or
+  after three reads from the angle. The snap delay is uRestSnapMs=150 (the shipped INI): a release then A within 150 ms
+  still uses the slot, later uses nothing (02:35:36.097, "USE (A) with no slot pointed").
+- **Fixed: a loaded save undid the player's slot stacking.** At 02:35:18 / 02:35:21 the longsword and the mace were
+  assigned to slot 2 (the keys followed - the radial opened four times after with no reconcile line and LT / RT cycled all
+  three); a save was then loaded (Tween Menu opened Save & Load at 02:40:19; the HUD came back in a new place at 02:42:23)
+  and put the save's keys back (mace on 1, longsword on 3). At 02:46:16 - the radial opening, the first wheel read after -
+  Reconcile took the game's keys as the truth: "slot 1 picked up ... Mace", "slot 3 picked up ... Longsword", "...left
+  Equipment slot 2's entries". The move had cleared the old keys (RemoveAt -> ClearKey, the game moving its own key);
+  the load brought them back. The wheel now wins for every item it holds: a key on an item the wheel has on another slot
+  comes off it, a key on an item the player took off the wheel this session comes off it again, the slot's active entry
+  goes back on its key; a key on an item on no slot is still picked up.
+
 ### Round 4 (2026-10-01) - four bugs from the owner's session of 01:35-01:56, built, not yet seen in game
 - **Fixed: RB closed the wheel but did not equip** (the owner: "I tried selecting an item and pressing RB, which closed
   the wheel but didn't equip the weapon"). Log 01:52:39: "wheels: USE Equipment slot 2 now (RB) - the radial closes on

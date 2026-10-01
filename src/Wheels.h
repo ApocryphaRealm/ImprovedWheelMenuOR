@@ -42,8 +42,14 @@ namespace wheels
 	bool CanFavourite(std::uint32_t a_formID);   // any carried item (armour and clothing: a favourite, never on the wheel)
 	void ToggleItem(std::uint32_t a_formID);   // the star in the inventory's favourites column: as Y on that item
 	std::unordered_set<std::uint32_t> MagicFavourites();   // every spell on the Magic wheel
-	// each slot's entry count (key order) and the most a slot holds (uEntriesPerSlot): the slot counters ("3/5")
-	std::array<int, 8> SlotCounts(Wheel a_wheel);
+	// each slot (key order): how many entries LT / RT can reach, and which of them (1-based) the slot shows now - 0 when
+	// it shows none. The slot counters ("2/3").
+	struct SlotCount
+	{
+		int position = 0;
+		int count = 0;
+	};
+	std::array<SlotCount, 8> SlotCounts(Wheel a_wheel);
 	int SlotCap();
 	void ToggleSpell(std::uint32_t a_formID);  // the star in the magic menu's favourites column: as Y on that spell
 
@@ -57,8 +63,9 @@ namespace wheels
 	void CycleEntry(Wheel a_wheel, int a_slot, int a_dir);   // step the active entry of a slot (D-pad L/R in a panel, LT/RT on the radial)
 	void SwitchWheel(int a_dir);               // D-pad L/R on the HUD radial
 	void RemoveEntry(Wheel a_wheel, int a_slot);   // LB on the HUD radial
-	// RB (or A) on the HUD radial's Equipment wheel: once the radial has closed (on nothing), the game's own quick-key
-	// press for this key (0-7) uses its item; the result is read back from the item and logged ("USE result")
+	// RB (or A) on the HUD radial's Equipment wheel (key 0-7): equipment goes on at once through Actor::EquipObject on
+	// the TES thread (an item already worn: nothing, logged); anything else gets the game's own quick-key press once the
+	// radial has closed (on nothing). The result is read back from the item and logged ("USE result")
 	void UseNow(int a_slot, const char* a_how);
 	std::string LastUse();                     // what the last RB / A use did (the iwm.pad state)
 	void UseMagic(int a_slot);                 // the radial closed on a slot of the Magic wheel: that spell becomes the one cast

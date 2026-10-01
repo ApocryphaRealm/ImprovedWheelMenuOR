@@ -144,6 +144,9 @@ namespace pad
 				g_radialAway = false;
 				g_radialResting = true;
 				g_radialRestSince = a_now;
+				if (g_snapped) {
+					quickkeys::RestorePointer(open ? "the wheel opened" : "the wheel closed");
+				}
 				g_snapped = false;
 				g_unreported = 0;
 			}
@@ -154,22 +157,28 @@ namespace pad
 			if (m >= kStickOn) {
 				g_radialAway = true;
 				g_radialResting = false;
-				// after a snap the game may not report the slot again when the stick goes back to the SAME slot (it never
-				// saw it leave): three reads out with nothing reported, and the slot is taken from the stick's angle
+				// after a snap the slot the game reports is no proof the stick points there: the game re-reports the OLD
+				// slot within a frame of the snap (2026-10-01 02:35:41.555). The snap ends when the game's slot agrees with
+				// the stick's angle, or after three reads out, from the angle itself.
 				if (g_snapped) {
-					if (quickkeys::PointedSlot() >= 1) {
+					const int key = KeyFromStick(a_pad);
+					if (quickkeys::PointedSlot() - 1 == key) {
 						g_snapped = false;
 						g_unreported = 0;
+						quickkeys::RestorePointer(std::format("the stick points at slot {} again", key + 1).c_str());
 					} else if (++g_unreported >= 3) {
-						const int key = KeyFromStick(a_pad);
 						g_snapped = false;
 						g_unreported = 0;
 						quickkeys::Repoint(key);
+						quickkeys::RestorePointer(std::format("the stick points at slot {} again (from its angle)", key + 1).c_str());
 						logger::info("pad: the stick points at slot {} again after the rest snap and the wheel did not say so - pointed from the stick's angle",
 							key + 1);
 					}
 				}
-			} else if (m < kStickRest) {
+			} else if (g_snapped) {
+				quickkeys::HoldCleared();   // the stick still rests: the arrow stays hidden
+			}
+			if (m < kStickRest) {
 				if (!g_radialResting) {
 					g_radialResting = true;
 					g_radialRestSince = a_now;
@@ -191,6 +200,11 @@ namespace pad
 		// (read 2026-09-29: pointing at the game's key 0 reported 1, key 7 reported 8; 0 / -1 = none)
 		int PointedKey()
 		{
+			// after a rest snap nothing is pointed until the stick points again, whatever the game re-reports (2026-10-01:
+			// LT / RT right after a snap still cycled the old slot, and A 14 ms after one used it)
+			if (g_snapped && quickkeys::RadialOpen()) {
+				return -1;
+			}
 			const int p = quickkeys::PointedSlot();
 			return p >= 1 && p <= 8 ? p - 1 : -1;
 		}
@@ -233,10 +247,10 @@ namespace pad
 		}
 
 		// RB or A on a slot of the inventory wheel: the radial closes on NOTHING (the choice cleared, the stick held centred
-		// until it has closed), and the slot's item is then used through the game's own quick-key press (wheels::UseNow).
-		// The radial's own close did not use the pointed key reliably (2026-10-01 01:52:39: RB on slot 2, the claymore,
-		// "the game uses slot 2" - and the bow stayed in hand). A key holding a spell is drawn empty (MagicWheel.cpp) and
-		// uses nothing - spells are the Magic wheel's.
+		// until it has closed), and the slot's item is used by wheels::UseNow - equipment at once through Actor::EquipObject,
+		// anything else through the game's own quick-key press after the close. The radial's own close did not use the
+		// pointed key (2026-10-01 01:52:39: RB on slot 2, the claymore, "the game uses slot 2" - and the bow stayed in hand).
+		// A key holding a spell is drawn empty (MagicWheel.cpp) and uses nothing - spells are the Magic wheel's.
 		void CloseOnEquipment(int a_slot, const char* a_how)
 		{
 			quickkeys::CancelChoice();
