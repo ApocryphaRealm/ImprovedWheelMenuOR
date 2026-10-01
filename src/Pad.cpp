@@ -529,7 +529,9 @@ namespace pad
 					if (pressed & XINPUT_GAMEPAD_DPAD_RIGHT) { wheels::SwitchWheel(+1); }
 					if (ltPressed) { wheels::CycleEntry(wheels::Active(), slot, -1); }
 					if (rtPressed) { wheels::CycleEntry(wheels::Active(), slot, +1); }
-					if (pressed & XINPUT_GAMEPAD_LEFT_SHOULDER) { wheels::RemoveEntry(wheels::Active(), slot); }
+					// LB is held from the game and does nothing on the wheel (the owner, 2026-10-01: "I pressed left bumper and it
+					// removed the selected magic from the wheel. But left bumper shouldn't do anything like that") - Y in the
+					// menus is how an entry comes off a wheel
 					// A chooses and closes, as on the game's own wheel (the owner, 2026-09-30: "I tried selecting clairvoyance
 					// with pressing A like the vanilla game does and it didn't close the wheel and select the magic it only
 					// selected it when I pressed the right bumper it should do both"). On the Magic wheel it is ours - the spell

@@ -62,7 +62,6 @@ namespace wheels
 	void Tick(bool a_assignHeld);              // every controller read: settles a pending Equipment assign
 	void CycleEntry(Wheel a_wheel, int a_slot, int a_dir);   // step the active entry of a slot (D-pad L/R in a panel, LT/RT on the radial)
 	void SwitchWheel(int a_dir);               // D-pad L/R on the HUD radial
-	void RemoveEntry(Wheel a_wheel, int a_slot);   // LB on the HUD radial
 	// RB (or A) on the HUD radial's Equipment wheel (key 0-7): equipment goes on at once through Actor::EquipObject on
 	// the TES thread (an item already worn: nothing, logged); anything else gets the game's own quick-key press once the
 	// radial has closed (on nothing). The result is read back from the item and logged ("USE result")

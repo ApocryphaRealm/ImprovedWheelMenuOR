@@ -5,6 +5,14 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### 2026-10-01 - LB does nothing on the wheel
+- **Fixed (untested): LB on the HUD radial took the pointed slot's shown entry off the wheel.** The owner: *"I pressed
+  left bumper and it removed the selected magic from the wheel. But left bumper shouldn't do anything like that."* The
+  log: `wheels: LB on the radial - LOC_FN_DefaultPlayerSpell REMOVED from Magic slot 4`. The LB branch in `Pad.cpp`
+  (from aa7975d, the first several-items-per-slot model) and `wheels::RemoveEntry` are gone; LB is still held from the
+  game while the radial is open, so it does nothing there. Y in the inventory and magic menus is how an entry comes off
+  a wheel.
+
 ### 2026-10-01 (build only, primary session)
 - **Fixed (untested): the HUD's spell picture now follows a Magic wheel choice.** Probe B showed the magic menu's pick
   ends with the game writing VHUDMainViewModel.SpellIcon and broadcasting the change (the HUD calls GetSpellIcon once);

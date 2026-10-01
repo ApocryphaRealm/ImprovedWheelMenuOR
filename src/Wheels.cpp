@@ -1270,25 +1270,6 @@ namespace wheels
 		}
 	}
 
-	void RemoveEntry(Wheel a_wheel, int a_slot)
-	{
-		if (a_slot < 0 || !EnsureLoaded()) {
-			return;
-		}
-		const int w = a_wheel == Wheel::kMagic ? kMagic : a_wheel == Wheel::kAmmo ? kAmmo : kEquip;
-		Slot& slot = g_wheels[w][a_slot];
-		if (slot.active < 0) {
-			logger::info("wheels: REMOVE - {} slot {} is empty", Name(a_wheel), a_slot + 1);
-			return;
-		}
-		RemoveAt(w, a_slot, slot.active, "LB on the radial");
-		Save();
-		if (w == kEquip) {
-			PatchEquipment(a_slot);
-		}
-		Refresh();
-	}
-
 	void UseNow(int a_slot, const char* a_how)
 	{
 		if (a_slot < 0) {
