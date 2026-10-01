@@ -5,6 +5,12 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### 2026-10-01 (build only, primary session)
+- **Fixed: the reflection self-check no longer latches failure early in a launch.** A KeyIndex not found yet (the
+  class exists before its property chain is linked) now means "ask again", as Tween Menu OR c4625c8 does; a failure is
+  latched only for a property found at a wrong offset (gate rule or-reflect-selfcheck-never-latches-not-found; CCM went
+  completely dead this way on 2026-09-29).
+
 ### Round 5 (2026-10-01) - four findings from the owner's session of 02:29-02:49 (adadfdd), built, not yet seen in game
 - **Fixed: the slot counter never changed while cycling** (the owner: "the numbers for which item I'm selecting isn't
   changing whether I'm on one out of five, two out of five"). It drew the reachable count against the cap ("3/5"), which
