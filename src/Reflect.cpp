@@ -161,7 +161,10 @@ namespace reflect
 		for (std::int32_t i = 0; i < n; ++i) {
 			auto* item = arr->IndexToObject(i);
 			auto* o = item ? reinterpret_cast<UE::UObject*>(item->object) : nullptr;
-			if (o && o->GetClass() == a_class && o != cdo) {
+			// templates are never the live thing: the class default object, and archetypes - a widget blueprint's
+			// WidgetTree template (WBP_ModernMenu_MagicMenu's Magic_QuickKeys under /Game/...) read as a wheel panel on
+			// screen, so the magic menu's panel "showed" the moment the menu opened (probe A, 2026-10-01)
+			if (o && o->GetClass() == a_class && o != cdo && (static_cast<std::int32_t>(o->objectFlags) & 0x30) == 0) {
 				out.push_back(o);
 			}
 		}

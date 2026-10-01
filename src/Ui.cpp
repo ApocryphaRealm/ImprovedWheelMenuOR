@@ -361,6 +361,7 @@ namespace ui
 		static auto* widgetClass = Class(L"/Script/UMG.Widget");
 		static auto* treeClass = Class(L"/Script/UMG.WidgetTree");
 		static auto* slotClass = Class(L"/Script/UMG.PanelSlot");
+		static auto* switcherClass = Class(L"/Script/UMG.WidgetSwitcher");
 		const auto slotOff = widgetClass && reflect::Ok() ? reflect::Offset(reinterpret_cast<UE::UStruct*>(widgetClass), "Slot") : -1;
 		const auto parentOff = slotClass && reflect::Ok() ? reflect::Offset(reinterpret_cast<UE::UStruct*>(slotClass), "Parent") : -1;
 		UE::UObject* w = a_widget;
@@ -375,6 +376,13 @@ namespace ui
 			auto* slot = slotOff >= 0 ? *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(w) + slotOff) : nullptr;
 			if (slot && parentOff >= 0) {
 				next = *reinterpret_cast<UE::UObject* const*>(reinterpret_cast<const std::uint8_t*>(slot) + parentOff);
+			}
+			// a WidgetSwitcher draws only its active child, though every child reads visible: the magic menu's wheel panel
+			// (Magic_QuickKeys) shares RightPanel_Switcher with the description, and read as shown under it (probe A,
+			// 2026-10-01: every parent identical with the panel hidden and shown)
+			if (next && switcherClass && next->GetClass()->IsChildOf(switcherClass)) {
+				Call active(next, L"GetActiveWidget");
+				if (active && active.Run() && active.Get<UE::UObject*>("ReturnValue") != w) return false;
 			}
 			if (!next) {
 				// a tree's root widget: the user widget that owns the tree (outer of its WidgetTree)
