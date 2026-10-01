@@ -960,6 +960,25 @@ namespace wheels
 		// spell-related on the HUD; every Magic wheel pick logged "did NOT change"). The same, from here: the spell's icon
 		// written into SpellIcon, then MVVMViewModelBase's K2_BroadcastFieldValueChanged for "SpellIcon" (the HUD's view
 		// models are VViewModelBase -> MVVMViewModelBase).
+		// The HUD's quick-magic picture itself. The view model write and its broadcast did not reach it (the owner, 2026-10-01:
+		// "The widget did not update"; a trace of VHUDMainViewModel showed our five K2_BroadcastFieldValueChanged calls and no
+		// GetSpellIcon after any of them - the HUD's binding listens under another field id). The widget has its own
+		// SetMagicTexture(InTexture) (WBP_ModernHud_MagicIcon_C, from VLegacyHudMagicIcon); called on the live one from
+		// TestBench with the Shield picture, the owner: "I did just notice the shield icon". Every live instance (never a
+		// template) gets it.
+		int SetHudWidgetTexture(UE::UObject* a_icon)
+		{
+			static auto* widgetCls = UE::StaticFindObject<UE::UClass>(nullptr, nullptr, L"/Game/UI/Modern/HUD/Main/WBP_ModernHud_MagicIcon.WBP_ModernHud_MagicIcon_C");
+			if (!widgetCls || !a_icon) return 0;
+			int set = 0;
+			for (auto* w : reflect::Instances(widgetCls)) {
+				ui::Call call(w, L"SetMagicTexture");
+				if (!call || !call.Set("InTexture", a_icon)) continue;
+				if (call.Run()) ++set;
+			}
+			return set;
+		}
+
 		void PushHudSpellIcon(std::uint32_t a_formID)
 		{
 			static auto* cls = UE::StaticFindObject<UE::UClass>(nullptr, nullptr, L"/Script/Altar.VHUDMainViewModel");
@@ -978,6 +997,8 @@ namespace wheels
 			}
 			auto* vm = vms.front();
 			*reinterpret_cast<UE::UObject**>(reinterpret_cast<std::uint8_t*>(vm) + off) = icon;
+			const int widgets = SetHudWidgetTexture(icon);
+			logger::info("wheels: the HUD's quick-magic picture set to {} on {} widget(s) (SetMagicTexture)", pe::Utf8(icon->GetFName().ToString()), widgets);
 			ui::Call broadcast(vm, L"K2_BroadcastFieldValueChanged");
 			void* id = broadcast ? broadcast.At("FieldId") : nullptr;
 			if (!id) {

@@ -5,6 +5,14 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### 2026-10-01 - the HUD's quick-magic picture is set on the widget itself
+- **Fixed (untested): a Magic wheel pick still left the HUD's quick-magic picture as it was.** The owner: *"The widget
+  did not update."* The view model's SpellIcon did change (logged CHANGED), but a TestBench trace of VHUDMainViewModel
+  showed the five K2_BroadcastFieldValueChanged("SpellIcon") calls and no GetSpellIcon after any of them - the HUD's
+  binding listens under another field id. WBP_ModernHud_MagicIcon_C has its own SetMagicTexture(InTexture); called on
+  the live widget from TestBench with the Shield picture, the owner saw it change. `SetHudWidgetTexture` now calls it on
+  every live instance (templates skipped) with the chosen spell's picture; the view model write and broadcast stay.
+
 ### 2026-10-01 - LB does nothing on the wheel
 - **Fixed (untested): LB on the HUD radial took the pointed slot's shown entry off the wheel.** The owner: *"I pressed
   left bumper and it removed the selected magic from the wheel. But left bumper shouldn't do anything like that."* The
