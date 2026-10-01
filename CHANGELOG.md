@@ -3,7 +3,23 @@
 Written as changes happen, not reconstructed afterwards (rule 61). Started 2026-09-29; the history before this file is
 in `git log`. A version number is issued by the version gate only once a build is seen working in game (rule 48).
 
-## Unreleased - 2026-09-29 - untested
+## 1.0.0 - 2026-10-01 - working
+
+The first release. Confirmed by the owner in game on b259746 (DLL sha1 3b18f33ee342, the 05:59 launch): "Unless I'm
+mistaken, IWM now works" and "The spell icon is finally swapping to the HUD widget"; earlier the same day he confirmed
+LT/RT cycling, RB/A equipping the right item, the rest snap and the item counter. The rounds below are the build's
+history as it was written; their "untested" marks are from the day each was built.
+
+What 1.0.0 is:
+- The game's own quick-key radial as an inventory wheel of eight slots, each holding up to five items: the slot counter
+  shows the item's place and the slot's places; LT/RT choose the item within the pointed slot; RB or A use it; letting
+  go of the wheel button uses nothing; a centre rest snap (on by default) holds no slot.
+- Y in the inventory and the magic menu puts the highlighted item or spell on its wheel (a favourite: it cannot be
+  sold or dropped); D-pad left/right choose which place it takes in the slot.
+- A Magic wheel of its own, drawn as itself; a pick makes the spell the selected one and the HUD's quick-magic picture
+  follows it.
+- An ammo wheel for bows (D-pad right while a bow is held), rebindable from a row on the game's own Controls page.
+
 
 ### 2026-10-01 - the HUD's quick-magic picture is set on the widget itself
 - **Fixed (untested): a Magic wheel pick still left the HUD's quick-magic picture as it was.** The owner: *"The widget

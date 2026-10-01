@@ -1,55 +1,24 @@
-# CommonLibOB64 Plugin Template
+# Improved Wheel Menu (Oblivion Remastered)
 
-This is a basic plugin template using CommonLibOB64.
+An OBSE64 plugin that makes Oblivion Remastered's own quick-key radial a full wheel menu: eight slots that each hold
+several items (LT / RT choose, RB or A use), a Magic wheel of its own for spells, and an ammo wheel for arrows while a
+bow is held. The game's radial, prompts and quick keys are used throughout. The package README is
+[`dist/README.txt`](dist/README.txt); the history is [`CHANGELOG.md`](CHANGELOG.md).
 
-### Requirements
-* [XMake](https://xmake.io) [3.0.0+]
-* C++23 Compiler (MSVC, Clang-CL)
+## Build
 
-## Getting Started
+Requires [XMake](https://xmake.io) 3.0+ and a C++23 compiler (MSVC or clang-cl).
+
 ```bat
-git clone --recurse-submodules https://github.com/libxse/commonlibob64-template
-cd commonlibob64-template
-```
-
-### Build
-To build the project, run the following command:
-```bat
+git clone --recurse-submodules https://github.com/ApocryphaRealm/ImprovedWheelMenuOR
+cd ImprovedWheelMenuOR
 xmake build
 ```
 
-> ***Note:*** *This will generate a `build/windows/` directory in the **project's root directory** with the build output.*
+The DLL is written to `build/windows/x64/releasedbg/ImprovedWheelMenu.dll`; the shipped files are under `dist/`.
 
-### Build Output (Optional)
-If you want to redirect the build output, set one of or both of the following environment variables:
+## Licence
 
-- Path to a Mod Manager mods folder: `XSE_TES4_MODS_PATH`
-
-  or
-
-- Path to a Oblivion install folder: `XSE_TES4_GAME_PATH`
-
-### Project Generation (Optional)
-If you use Visual Studio, run the following command:
-```bat
-xmake project -k vsxmake
-```
-
-> ***Note:*** *This will generate a `vsxmakeXXXX/` directory in the **project's root directory** using the latest version of Visual Studio installed on the system.*
-
-**Alternatively**, if you do not use Visual Studio, you can generate a `compile_commands.json` file for use with a laguage server like clangd in any code editor that supports it, like vscode:
-```bat
-xmake project -k compile_commands
-```
-
-> ***Note:*** *You must have a language server extension installed to make use of this file. I recommend `clangd`. Do not have more than one installed at a time as they will conflict with each other. I also recommend installing the `xmake` extension if available to make building the project easier.*
-
-### Upgrading Packages (Optional)
-If you want to upgrade the project's dependencies, run the following commands:
-```bat
-xmake repo --update
-xmake require --upgrade
-```
-
-## Documentation
-Please refer to the [Wiki](../../wiki/Home) for more advanced topics.
+GPL-3.0-or-later ([`dist/LICENSE`](dist/LICENSE), [`dist/NOTICE.md`](dist/NOTICE.md)). Built on
+[CommonLibOB64](https://github.com/libxse/commonlibob64) and its plugin template (GPL-3.0, with the modding exception in
+`EXCEPTIONS`); other linked components are listed in [`dist/THIRD_PARTY_NOTICES.md`](dist/THIRD_PARTY_NOTICES.md).
