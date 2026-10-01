@@ -254,11 +254,88 @@ namespace quickkeys
 	void CancelChoice()
 	{
 		if (auto* f = KeyIndexField()) {
-			logger::info("quick keys: choice cancelled (the view model pointed at slot {})", *f + 1);
+			// KeyIndex is already the slot number as drawn (1 = top, the game's key = number - 1; 0 / -1 = none). The old
+			// message added one more ("pointed at slot 3" while the pad said slot 2, 2026-10-01 01:50:55).
+			logger::info("quick keys: choice cancelled (the view model pointed at {})",
+				*f >= 1 && *f <= 8 ? std::format("slot {}", *f) : std::string("no slot"));
 			*f = -1;
 		}
 		std::scoped_lock l(g_statusLock);
 		g_status.pointedSlot = -1;
+	}
+
+	namespace
+	{
+		std::int32_t BpInt(UE::UObject* a_widget, const char* a_name)
+		{
+			const auto off = a_widget && reflect::Ok() ? reflect::Offset(a_widget->GetClass(), a_name) : -1;
+			return off >= 0 ? *reinterpret_cast<const std::int32_t*>(reinterpret_cast<const std::uint8_t*>(a_widget) + off) : -999;
+		}
+	}
+
+	void ClearPointer()
+	{
+		CancelChoice();
+		// The view model's KeyIndex is only what the game reads; the wheel's highlight is the widget's own: its Blueprint
+		// keeps QuickKeyID / HoveredKeyID / CurrentScaledKeyID (read 2026-10-01 with ue.props) and draws the selector from
+		// "Update Key Index" (-> its UpdateFocusedKey, a scalar on the wheel's material). Writing KeyIndex = -1 left the
+		// slot lit (the owner, 2026-10-01: no centre rest snap visible on the inventory wheel). The game itself calls
+		// "Update Key Index"(-1) as the radial opens with nothing pointed - the same call clears it here. It passes through
+		// our watch, so PointedSlot follows (-1).
+		auto* w = VisibleWheel();
+		auto* fn = w ? w->FindFunction(UE::FName(L"Update Key Index", UE::EFindName::Find)) : nullptr;
+		if (!w || !fn) {
+			logger::info("quick keys: the wheel's highlight not cleared - {}", !w ? "no wheel on screen" : "the wheel has no 'Update Key Index'");
+			return;
+		}
+		const auto q0 = BpInt(w, "QuickKeyID"), h0 = BpInt(w, "HoveredKeyID"), c0 = BpInt(w, "CurrentScaledKeyID");
+		std::array<std::uint8_t, 32> params{};
+		*reinterpret_cast<std::int32_t*>(params.data()) = -1;
+		w->ProcessEvent(fn, params.data());
+		logger::info("quick keys: the wheel's highlight cleared ('Update Key Index'(-1) on the wheel) - QuickKeyID {} -> {}, HoveredKeyID {} -> {}, CurrentScaledKeyID {} -> {}",
+			q0, BpInt(w, "QuickKeyID"), h0, BpInt(w, "HoveredKeyID"), c0, BpInt(w, "CurrentScaledKeyID"));
+	}
+
+	void Repoint(int a_key)
+	{
+		auto* w = VisibleWheel();
+		auto* fn = w ? w->FindFunction(UE::FName(L"Update Key Index", UE::EFindName::Find)) : nullptr;
+		if (!fn || a_key < 0 || a_key > 7) {
+			return;
+		}
+		if (auto* f = KeyIndexField()) {
+			*f = a_key + 1;   // as the game's own pointing leaves it: the slot number as drawn
+		}
+		std::array<std::uint8_t, 32> params{};
+		*reinterpret_cast<std::int32_t*>(params.data()) = a_key + 1;
+		w->ProcessEvent(fn, params.data());   // through our watch: PointedSlot follows
+	}
+
+	bool PressQuickKey(int a_key)
+	{
+		if (a_key < 0 || a_key > 7) {
+			return false;
+		}
+		// The game's own direct quick-key use: VEnhancedAltarPlayerController::Quick<N>Input_Pressed / _Released (no
+		// parameters, read 2026-10-01 with ue.struct) - what Enhanced Input calls for IA_Game_QuickKeys_Keyboard_<N>, the
+		// number keys 1-8, which use key N-1 with no radial at all.
+		auto* pc = ui::PlayerController();
+		if (!pc) {
+			logger::warn("quick keys: no player controller - key {} not pressed", a_key + 1);
+			return false;
+		}
+		const std::wstring n = std::to_wstring(a_key + 1);
+		ui::Call press(pc, (L"Quick" + n + L"Input_Pressed").c_str());
+		ui::Call release(pc, (L"Quick" + n + L"Input_Released").c_str());
+		if (!press) {
+			logger::warn("quick keys: the player controller has no Quick{}Input_Pressed - key {} not pressed", a_key + 1, a_key + 1);
+			return false;
+		}
+		const bool ok = press.RunGuarded();
+		if (release) {
+			release.RunGuarded();
+		}
+		return ok;
 	}
 
 	Icons ReadIcons()

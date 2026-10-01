@@ -161,26 +161,51 @@ namespace wheels
 
 		int Cap() { return std::max(1, settings::Get().entriesPerSlot); }
 
-		// The game's keys are the truth for each Equipment slot's active entry (the save carries them).
+		bool AssignPending();   // the game's own assign is being watched (Settle reads the keys' change itself)
+
+		// The game's keys are the truth for each Equipment slot's active entry (the save carries them), and an item is on
+		// ONE slot of the wheel. A wheel file written beside another save can disagree with the keys the game loaded: on
+		// 2026-10-01 the file had slot 2 = {Steel Bow} and slot 3 = {Steel Claymore, Steel Longsword} while the game's
+		// keys were claymore on 2, longsword on 3, bow on 4 - slot 2 "picked up" the claymore and kept the bow, which was
+		// slot 4's key, so LT / RT on slot 2 had nothing it could step to ("2 entries, nothing to step to", x5) while the
+		// counter promised two. So: each keyed item goes into its own slot, and leaves every other slot's entries.
 		void Reconcile()
 		{
 			const auto keys = inventory::Keys();
+			bool changed = false;
 			for (int s = 0; s < inventory::kSlots; ++s) {
 				Slot& slot = g_wheels[kEquip][s];
-				if (!keys[s]) {
-					slot.active = -1;
+				if (!keys[s] || IndexOf(slot, keys[s]) >= 0) {
 					continue;
 				}
-				int idx = IndexOf(slot, keys[s]);
-				if (idx < 0) {
-					if (static_cast<int>(slot.entries.size()) >= Cap()) {
-						slot.entries.pop_back();
-					}
-					slot.entries.push_back(keys[s]);
-					idx = static_cast<int>(slot.entries.size()) - 1;
-					logger::info("wheels: Equipment slot {} picked up {} from the game", s + 1, inventory::NameOf(keys[s]));
+				if (static_cast<int>(slot.entries.size()) >= Cap()) {
+					logger::info("wheels: Equipment slot {} is full - {} leaves it to make room for the game's key", s + 1, inventory::NameOf(slot.entries.back()));
+					slot.entries.pop_back();
 				}
-				slot.active = idx;
+				slot.entries.push_back(keys[s]);
+				changed = true;
+				logger::info("wheels: Equipment slot {} picked up {} from the game (the item on the game's key {})", s + 1, inventory::NameOf(keys[s]), s + 1);
+			}
+			for (int s = 0; s < inventory::kSlots; ++s) {
+				if (!keys[s]) {
+					continue;
+				}
+				for (int t = 0; t < inventory::kSlots; ++t) {
+					Slot& other = g_wheels[kEquip][t];
+					for (int idx = t == s ? -1 : IndexOf(other, keys[s]); idx >= 0; idx = IndexOf(other, keys[s])) {
+						other.entries.erase(other.entries.begin() + idx);
+						changed = true;
+						logger::info("wheels: {} left Equipment slot {}'s entries - it is on slot {}'s key in the game, and an item is on one slot",
+							inventory::NameOf(keys[s]), t + 1, s + 1);
+					}
+				}
+			}
+			for (int s = 0; s < inventory::kSlots; ++s) {
+				Slot& slot = g_wheels[kEquip][s];
+				slot.active = keys[s] ? IndexOf(slot, keys[s]) : -1;
+			}
+			if (changed) {
+				Save();
 			}
 		}
 
@@ -193,7 +218,12 @@ namespace wheels
 			if (name != g_loadedFor) {
 				Load(name);
 			}
-			Reconcile();
+			// not while the game's own assign is watched: Settle reads what arrived on the key and decides ADDED / REMOVED /
+			// moved itself - reconciling first (the favourites column and the slot counters ask every 100 ms) took the
+			// arrival as already "in the slot"
+			if (!AssignPending()) {
+				Reconcile();
+			}
 			MigrateAmmo();
 			return true;
 		}
@@ -360,8 +390,24 @@ namespace wheels
 
 		// ---- Equipment: moving the game's key ----
 
+		// Why an Equipment entry cannot be stepped to (LT / RT, D-pad left / right): it is not carried, or it is on another
+		// slot's game key. Empty = it can be.
+		std::string Unreachable(int a_slot, std::uint32_t a_id, const inventory::KeyMap& a_keys)
+		{
+			if (!inventory::Has(a_id)) {
+				return "not carried";
+			}
+			for (int k = 0; k < inventory::kSlots; ++k) {
+				if (k != a_slot && a_keys[k] == a_id) {
+					return std::format("on slot {}'s key", k + 1);
+				}
+			}
+			return {};
+		}
+
 		// The entry of an Equipment slot to make active after a_from (dir +1/-1): carried, and not active in another slot.
-		int NextEquipment(int a_slot, int a_from, int a_dir)
+		// Every entry passed over is named with its reason in *a_skipped.
+		int NextEquipment(int a_slot, int a_from, int a_dir, std::string* a_skipped = nullptr)
 		{
 			const Slot& slot = g_wheels[kEquip][a_slot];
 			const int n = static_cast<int>(slot.entries.size());
@@ -369,9 +415,12 @@ namespace wheels
 			for (int step = 1; step <= n; ++step) {
 				const int i = ((a_from + a_dir * step) % n + n) % n;
 				const auto id = slot.entries[i];
-				const bool elsewhere = std::find(keys.begin(), keys.end(), id) != keys.end() && keys[a_slot] != id;
-				if (inventory::Has(id) && !elsewhere) {
+				const std::string why = Unreachable(a_slot, id, keys);
+				if (why.empty()) {
 					return i;
+				}
+				if (a_skipped && i != slot.active) {
+					*a_skipped += std::format("{}{} skipped: {}", a_skipped->empty() ? "" : "; ", inventory::NameOf(id), why);
 				}
 			}
 			return -1;
@@ -460,6 +509,8 @@ namespace wheels
 			int               readsSinceRelease = 0;
 			bool              released = false;
 		} g_pending;
+
+		bool AssignPending() { return g_pending.on; }
 
 		void Settle(int a_slot, std::uint32_t a_arrived)
 		{
@@ -688,6 +739,119 @@ namespace wheels
 
 	namespace
 	{
+		// RB (or A) on an Equipment slot of the HUD radial: the radial closes on NOTHING (the choice cleared, the stick
+		// held centred), and once it has closed the game's own quick-key press for that key is run - the path the number
+		// keys 1-8 take (quickkeys::PressQuickKey). The vanilla close did not equip reliably: 2026-10-01 01:52:39, "USE
+		// Equipment slot 2 now (RB)" then "the game uses slot 2" (the view model's KeyIndex, our reading), and the Steel
+		// Claymore on key 2 never came to hand - the bow stayed. What the use did is read back from the item itself.
+		struct PendingUse
+		{
+			bool                                  on = false;
+			bool                                  closed = false;
+			bool                                  pressed = false;
+			int                                   key = -1;
+			std::uint32_t                         id = 0;
+			inventory::State                      before{};
+			const char*                           how = "RB";
+			std::chrono::steady_clock::time_point armed{}, closedAt{}, verifyAt{};
+		} g_use;
+		std::string g_lastUse = "none yet";
+
+		bool Equippable(std::uint32_t a_id)
+		{
+			auto* form = a_id ? RE::TESForm::LookupByID(a_id) : nullptr;
+			if (!form) return false;
+			const auto t = form->GetFormType();
+			return t == RE::FormType::Weapon || t == RE::FormType::Armor || t == RE::FormType::Clothing || t == RE::FormType::Light;
+		}
+
+		void DriveUse()
+		{
+			if (!g_use.on) {
+				return;
+			}
+			using namespace std::chrono;
+			const auto now = steady_clock::now();
+			const auto name = inventory::NameOf(g_use.id);
+			const int  n = g_use.key + 1;
+			if (!g_use.pressed) {
+				if (quickkeys::RadialOpen()) {
+					if (now - g_use.armed > 3s) {
+						g_use.on = false;
+						g_lastUse = std::format("slot {}: the radial never closed", n);
+						logger::info("wheels: USE slot {} - the radial did not close within 3 s; {} not used", n, name);
+					}
+					return;
+				}
+				if (!g_use.closed) {
+					g_use.closed = true;
+					g_use.closedAt = now;
+				}
+				if (now - g_use.closedAt < 150ms) {
+					return;   // the TES side's own close settles first
+				}
+				if (menus::AnyOpen()) {
+					if (now - g_use.closedAt > 1500ms) {
+						g_use.on = false;
+						g_lastUse = std::format("slot {}: a menu stayed open", n);
+						logger::info("wheels: USE slot {} - a menu is open 1.5 s after the radial closed; {} not used", n, name);
+					}
+					return;
+				}
+				const auto keys = inventory::Keys();
+				const auto st = inventory::StateOf(g_use.id);
+				if (keys[static_cast<std::size_t>(g_use.key)] != g_use.id) {
+					g_use.on = false;
+					g_lastUse = std::format("slot {}: the key moved", n);
+					logger::info("wheels: USE slot {} - the game's key {} no longer holds {}; nothing pressed", n, n, name);
+					return;
+				}
+				if (st != g_use.before) {
+					// the radial's own close used it after all (the choice was cleared, so it should not have): never twice
+					g_use.on = false;
+					g_lastUse = std::format("slot {}: {} used by the radial's own close ({} -> {})", n, name, inventory::Describe(g_use.before),
+						inventory::Describe(st));
+					logger::info("wheels: USE slot {} - the radial's own close already used {} ({} -> {}); the key is not pressed again", n, name,
+						inventory::Describe(g_use.before), inventory::Describe(st));
+					return;
+				}
+				const bool ok = quickkeys::PressQuickKey(g_use.key);
+				logger::info("wheels: USE slot {} - the game's own quick key {} pressed for {} (VEnhancedAltarPlayerController Quick{}Input_Pressed / _Released){}",
+					n, n, name, n, ok ? "" : " - the call FAILED");
+				if (!ok) {
+					g_use.on = false;
+					g_lastUse = std::format("slot {}: the key press could not be made", n);
+					return;
+				}
+				g_use.pressed = true;
+				g_use.verifyAt = now + 700ms;
+				return;
+			}
+			if (now < g_use.verifyAt) {
+				return;
+			}
+			g_use.on = false;
+			const auto st = inventory::StateOf(g_use.id);
+			const bool menu = menus::AnyOpen();
+			if (st != g_use.before || menu) {
+				g_lastUse = std::format("slot {}: {} used by the game's key press ({} -> {}{})", n, name, inventory::Describe(g_use.before),
+					inventory::Describe(st), menu ? ", a menu opened" : "");
+				logger::info("wheels: USE result slot {} ({}) - {}: {} -> {}{} - used through the game's own quick key {}", n, g_use.how, name,
+					inventory::Describe(g_use.before), inventory::Describe(st), menu ? ", a menu opened" : "", n);
+				return;
+			}
+			if (Equippable(g_use.id) && st.carried && !st.worn) {
+				g_lastUse = std::format("slot {}: {} unchanged after the key press - fallback equip", n, name);
+				logger::info("wheels: USE result slot {} ({}) - {} unchanged 0.7 s after the game's key press ({}); FALLBACK: equipped through Actor::EquipObject on the TES thread",
+					n, g_use.how, name, inventory::Describe(st));
+				inventory::EquipKeyed(g_use.id);
+				return;
+			}
+			g_lastUse = std::format("slot {}: {} unchanged after the key press", n, name);
+			logger::info("wheels: USE result slot {} ({}) - {} unchanged 0.7 s after the game's key press ({}) - nothing visible changed", n, g_use.how, name,
+				inventory::Describe(st));
+		}
+
 		std::chrono::steady_clock::time_point g_hudCheckAt{};
 		UE::UObject*                          g_hudIconBefore = nullptr;   // compared only
 
@@ -772,8 +936,17 @@ namespace wheels
 			return out;
 		}
 		const int w = a_wheel == Wheel::kMagic ? kMagic : a_wheel == Wheel::kAmmo ? kAmmo : kEquip;
+		// the Equipment counter counts what LT / RT can show - an entry not carried, or on another slot's key, is not one
+		// (the owner, 2026-10-01: slot 2 read 2 while LT / RT had nothing to step to)
+		const auto keys = w == kEquip ? inventory::Keys() : inventory::KeyMap{};
 		for (int s = 0; s < inventory::kSlots; ++s) {
-			out[s] = static_cast<int>(g_wheels[w][s].entries.size());
+			if (w != kEquip) {
+				out[s] = static_cast<int>(g_wheels[w][s].entries.size());
+				continue;
+			}
+			for (const auto id : g_wheels[w][s].entries) {
+				out[s] += Unreachable(s, id, keys).empty() ? 1 : 0;
+			}
 		}
 		return out;
 	}
@@ -896,6 +1069,7 @@ namespace wheels
 	{
 		CheckHud();
 		AssertMagic();
+		DriveUse();
 		if (!g_pending.on) {
 			return;
 		}
@@ -931,14 +1105,19 @@ namespace wheels
 		Slot& slot = g_wheels[w][a_slot];
 		const int n = static_cast<int>(slot.entries.size());
 		int next = -1;
+		std::string skipped;
 		if (w == kMagic) {
 			next = n > 1 ? ((slot.active < 0 ? 0 : slot.active) + a_dir + n) % n : -1;
 		} else if (n > 0) {
-			next = NextEquipment(a_slot, slot.active < 0 ? (a_dir > 0 ? -1 : 0) : slot.active, a_dir);
+			next = NextEquipment(a_slot, slot.active < 0 ? (a_dir > 0 ? -1 : 0) : slot.active, a_dir, &skipped);
 		}
 		if (next < 0 || next == slot.active) {
-			logger::info("wheels: CYCLE {} slot {} - {} entr{}, nothing to step to", Name(a_wheel), a_slot + 1, n, n == 1 ? "y" : "ies");
+			logger::info("wheels: CYCLE {} slot {} - {} entr{}, nothing to step to{}", Name(a_wheel), a_slot + 1, n, n == 1 ? "y" : "ies",
+				skipped.empty() ? std::string() : " (" + skipped + ")");
 			return;
+		}
+		if (!skipped.empty()) {
+			logger::info("wheels: CYCLE {} slot {} - {}", Name(a_wheel), a_slot + 1, skipped);
 		}
 		if (w == kEquip && !inventory::SetKey(slot.entries[next], a_slot)) {
 			return;
@@ -981,10 +1160,33 @@ namespace wheels
 		Refresh();
 	}
 
-	void UseNow(int a_slot)
+	void UseNow(int a_slot, const char* a_how)
 	{
-		logger::info("wheels: USE {} slot {} now (RB) - the radial closes on it", Name(Active()), a_slot + 1);
+		if (a_slot < 0) {
+			logger::info("wheels: USE ({}) with no slot pointed - nothing used", a_how);
+			return;
+		}
+		if (!EnsureLoaded()) {
+			return;
+		}
+		const auto id = inventory::Keys()[static_cast<std::size_t>(a_slot)];
+		if (!id) {
+			logger::info("wheels: USE Equipment slot {} ({}) - the game's key {} holds nothing; nothing used", a_slot + 1, a_how, a_slot + 1);
+			g_lastUse = std::format("slot {}: empty key", a_slot + 1);
+			return;
+		}
+		g_use = {};
+		g_use.on = true;
+		g_use.key = a_slot;
+		g_use.id = id;
+		g_use.before = inventory::StateOf(id);
+		g_use.how = a_how;
+		g_use.armed = std::chrono::steady_clock::now();
+		logger::info("wheels: USE Equipment slot {} ({}) - {} ({}); the radial closes on nothing, then the game's own quick key {} is pressed",
+			a_slot + 1, a_how, inventory::NameOf(id), inventory::Describe(g_use.before), a_slot + 1);
 	}
+
+	std::string LastUse() { return g_lastUse; }
 
 	void UseMagic(int a_slot)
 	{

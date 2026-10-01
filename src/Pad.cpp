@@ -13,6 +13,7 @@
 #include <Xinput.h>   // types and constants only - nothing is linked or loaded
 
 #include <deque>
+#include <numbers>
 
 namespace pad
 {
@@ -122,6 +123,18 @@ namespace pad
 		bool              g_radialAway = false;     // the stick has pointed since the last rest
 		bool              g_radialResting = true;
 		Clock::time_point g_radialRestSince{};
+		bool              g_snapped = false;        // a rest snap cleared the wheel and the stick has not pointed it again yet
+		int               g_unreported = 0;         // reads with the stick out and no slot reported since the snap
+
+		// the key (0-7) the right stick points at, as the wheel lays them out: 45 degrees a slot, key 0 at the top, clockwise
+		int KeyFromStick(const XINPUT_GAMEPAD& a_pad)
+		{
+			double deg = std::atan2(a_pad.sThumbRX / 32767.0, a_pad.sThumbRY / 32767.0) * 180.0 / std::numbers::pi;
+			if (deg < 0) {
+				deg += 360.0;
+			}
+			return static_cast<int>((deg + 22.5) / 45.0) % 8;
+		}
 
 		void RestSnap(const XINPUT_GAMEPAD& a_pad, Clock::time_point a_now)
 		{
@@ -131,14 +144,31 @@ namespace pad
 				g_radialAway = false;
 				g_radialResting = true;
 				g_radialRestSince = a_now;
+				g_snapped = false;
+				g_unreported = 0;
 			}
-			if (!open || !settings::Get().centreRestSnap) {
+			if (!open || !settings::Get().centreRestSnap || g_closingMagic) {
 				return;
 			}
 			const double m = std::hypot(a_pad.sThumbRX / 32767.0, a_pad.sThumbRY / 32767.0);
 			if (m >= kStickOn) {
 				g_radialAway = true;
 				g_radialResting = false;
+				// after a snap the game may not report the slot again when the stick goes back to the SAME slot (it never
+				// saw it leave): three reads out with nothing reported, and the slot is taken from the stick's angle
+				if (g_snapped) {
+					if (quickkeys::PointedSlot() >= 1) {
+						g_snapped = false;
+						g_unreported = 0;
+					} else if (++g_unreported >= 3) {
+						const int key = KeyFromStick(a_pad);
+						g_snapped = false;
+						g_unreported = 0;
+						quickkeys::Repoint(key);
+						logger::info("pad: the stick points at slot {} again after the rest snap and the wheel did not say so - pointed from the stick's angle",
+							key + 1);
+					}
+				}
 			} else if (m < kStickRest) {
 				if (!g_radialResting) {
 					g_radialResting = true;
@@ -147,9 +177,11 @@ namespace pad
 				if (g_radialAway && a_now - g_radialRestSince >= std::chrono::milliseconds(settings::Get().restSnapMs)) {
 					g_radialAway = false;
 					if (quickkeys::PointedSlot() >= 1) {
-						quickkeys::CancelChoice();
 						logger::info("pad: the right stick came back to rest - the wheel points at no slot (centre rest snap)");
+						quickkeys::ClearPointer();   // the choice AND the wheel's own highlight
 						++g_diag.restSnaps;
+						g_snapped = true;
+						g_unreported = 0;
 					}
 				}
 			}
@@ -200,14 +232,20 @@ namespace pad
 				pointed >= 0 ? std::format(" (slot {} was pointed: RB or A uses a slot)", pointed + 1) : std::string());
 		}
 
-		// the HUD radial is closing on a slot of the inventory wheel whose game key holds a spell: that slot is drawn empty
-		// (MagicWheel.cpp), so it uses nothing - spells are the Magic wheel's
-		void CloseOnEquipment(int a_slot)
+		// RB or A on a slot of the inventory wheel: the radial closes on NOTHING (the choice cleared, the stick held centred
+		// until it has closed), and the slot's item is then used through the game's own quick-key press (wheels::UseNow).
+		// The radial's own close did not use the pointed key reliably (2026-10-01 01:52:39: RB on slot 2, the claymore,
+		// "the game uses slot 2" - and the bow stayed in hand). A key holding a spell is drawn empty (MagicWheel.cpp) and
+		// uses nothing - spells are the Magic wheel's.
+		void CloseOnEquipment(int a_slot, const char* a_how)
 		{
+			quickkeys::CancelChoice();
+			g_closingMagic = true;   // held clear and centred until the radial has closed
 			if (magicwheel::IsSpellKey(a_slot)) {
-				quickkeys::CancelChoice();
 				logger::info("pad: the inventory wheel closed on slot {}, whose game key holds a spell - nothing used", a_slot + 1);
+				return;
 			}
+			wheels::UseNow(a_slot, a_how);
 		}
 
 		// The Apocrypha Menu Framework's window is open (AMF_IsMenuOpen, AMF OR 1.0.5+). This read comes before the
@@ -483,28 +521,29 @@ namespace pad
 					// selected it when I pressed the right bumper it should do both"). On the Magic wheel it is ours - the spell
 					// is set and the game never sees A, so it cannot use its own key there; on the inventory wheel A stays the
 					// game's, and a key holding a spell still uses nothing.
+					// A is ours on both wheels now (the game never sees it): on the inventory wheel it uses the pointed slot
+					// exactly as RB does (2026-10-01: "make RB (and A on the inventory wheel) use the pointed key")
 					if (pressed & XINPUT_GAMEPAD_A) {
 						if (wheels::Active() == wheels::Wheel::kMagic) {
 							CloseOnMagic(slot);
-							g_swallowA = true;
-							g_latched = false;
-							if (raw & XINPUT_GAMEPAD_DPAD_DOWN) { g_suppressDown = true; }
-							out &= ~(XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_A);   // let go now: the wheel closes
 							logger::info("pad: A on the Magic wheel - slot {} chosen, the wheel closes", slot + 1);
 						} else {
-							CloseOnEquipment(slot);
+							CloseOnEquipment(slot, "A");
 						}
+						g_swallowA = true;
+						g_latched = false;
+						if (raw & XINPUT_GAMEPAD_DPAD_DOWN) { g_suppressDown = true; }
+						out &= ~(XINPUT_GAMEPAD_DPAD_DOWN | XINPUT_GAMEPAD_A);   // let go now: the wheel closes
 					}
 					if (pressed & XINPUT_GAMEPAD_RIGHT_SHOULDER) {
 						if (wheels::Active() == wheels::Wheel::kMagic) {
 							CloseOnMagic(slot);
 						} else {
-							CloseOnEquipment(slot);
-							wheels::UseNow(slot);
+							CloseOnEquipment(slot, "RB");
 						}
 						g_latched = false;
 						if (raw & XINPUT_GAMEPAD_DPAD_DOWN) { g_suppressDown = true; }
-						out &= ~XINPUT_GAMEPAD_DPAD_DOWN;   // let go now: the game closes the wheel on the pointed slot
+						out &= ~XINPUT_GAMEPAD_DPAD_DOWN;   // let go now: the wheel closes (on nothing - the use follows)
 					}
 					a_pad.bLeftTrigger = 0;
 					a_pad.bRightTrigger = 0;

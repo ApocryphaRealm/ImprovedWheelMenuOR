@@ -57,7 +57,10 @@ namespace wheels
 	void CycleEntry(Wheel a_wheel, int a_slot, int a_dir);   // step the active entry of a slot (D-pad L/R in a panel, LT/RT on the radial)
 	void SwitchWheel(int a_dir);               // D-pad L/R on the HUD radial
 	void RemoveEntry(Wheel a_wheel, int a_slot);   // LB on the HUD radial
-	void UseNow(int a_slot);                   // RB on the HUD radial (the radial then closes on this slot)
+	// RB (or A) on the HUD radial's Equipment wheel: once the radial has closed (on nothing), the game's own quick-key
+	// press for this key (0-7) uses its item; the result is read back from the item and logged ("USE result")
+	void UseNow(int a_slot, const char* a_how);
+	std::string LastUse();                     // what the last RB / A use did (the iwm.pad state)
 	void UseMagic(int a_slot);                 // the radial closed on a slot of the Magic wheel: that spell becomes the one cast
 
 	// what the wheel's pictures show

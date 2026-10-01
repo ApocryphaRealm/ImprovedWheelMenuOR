@@ -1,5 +1,7 @@
 #include "Inventory.h"
 
+#include "TesThread.h"
+
 namespace inventory
 {
 	namespace
@@ -243,5 +245,54 @@ namespace inventory
 			n = player ? RE::TESFullName::GetFullName(player) : nullptr;
 		}
 		return n && *n ? std::string(n) : std::string("Player");
+	}
+
+	State StateOf(std::uint32_t a_formID)
+	{
+		State out;
+		auto* item = Find(a_formID);
+		if (!item || item->count <= 0) {
+			return out;
+		}
+		out.carried = true;
+		out.count = item->count;
+		if (item->extraData) {
+			for (RE::ExtraDataList* xl : *item->extraData) {
+				if (xl && (xl->GetExtraData(RE::EXTRA_DATA_TYPE::Worn) || xl->GetExtraData(RE::EXTRA_DATA_TYPE::WornLeft))) {
+					out.worn = true;
+				}
+			}
+		}
+		return out;
+	}
+
+	std::string Describe(const State& a_state)
+	{
+		return a_state.carried ? std::format("x{}{}", a_state.count, a_state.worn ? ", worn" : ", not worn") : std::string("not carried");
+	}
+
+	void EquipKeyed(std::uint32_t a_formID)
+	{
+		testhread::Post([a_formID] {
+			auto* player = RE::PlayerCharacter::GetSingleton();
+			auto* item = Find(a_formID);
+			if (!player || !item || !item->object || item->count <= 0) {
+				logger::info("wheels: fallback equip - {} is not carried any more", NameOf(a_formID));
+				return;
+			}
+			// the instance carrying the quick key (an enchanted or damaged one is its own list), else the base item
+			RE::ExtraDataList* keyed = nullptr;
+			if (item->extraData) {
+				for (RE::ExtraDataList* xl : *item->extraData) {
+					if (xl && KeyExtra(xl)) {
+						keyed = xl;
+						break;
+					}
+				}
+			}
+			// no lock: EquipObject's last argument is the console's NoUnequip (gate rule or-equipobject-never-locks)
+			player->EquipObject(item->object, 1, keyed, false, false);
+			logger::info("wheels: fallback equip - {} equipped on the TES thread ({})", NameOf(a_formID), Describe(StateOf(a_formID)));
+		});
 	}
 }

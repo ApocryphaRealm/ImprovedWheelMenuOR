@@ -73,6 +73,7 @@ namespace tool
 			j["queued_steps"] = pad::Queued();
 			j["rows"] = rows::Status();
 			j["wheels"] = wheels::Status();
+			j["last_use"] = wheels::LastUse();
 			const auto keys = inventory::Keys();
 			json k = json::array();
 			for (const auto id : keys) {

@@ -26,4 +26,19 @@ namespace inventory
 	bool SetKey(std::uint32_t a_formID, int a_key);   // puts quick key N on that item (and off any other item)
 
 	std::string PlayerName();                         // the character the wheels are saved under
+
+	// what can be seen of an item from outside: how many are carried and whether one is worn (a use of its quick key
+	// changes one of the two - equipped, unequipped, drunk, read off the stack). Reads only: any thread.
+	struct State
+	{
+		bool carried = false;
+		int  count = 0;
+		bool worn = false;
+		bool operator==(const State&) const = default;
+	};
+	State StateOf(std::uint32_t a_formID);
+	std::string Describe(const State& a_state);       // "x1, worn" / "not carried"
+
+	// puts the item carrying quick key a_key on, on the TES thread (the fallback when the game's own use did nothing)
+	void EquipKeyed(std::uint32_t a_formID);
 }

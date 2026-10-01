@@ -350,37 +350,70 @@ namespace rows
 		// Read fault-guarded, and believed only when it is a live form of type MagicEffect.
 		int g_effectOffset = -1;   // where an EffectItem keeps its EffectSetting*, once found
 
+		// a committed, readable range - asked before the read, so a wrong guess never faults (TestBench writes a crash
+		// record on every first-chance access violation, even one a __try catches)
+		bool Readable(std::uintptr_t a_p, std::size_t a_n)
+		{
+			if (a_p < 0x10000 || a_p > 0x7FFFFFFFFFFFull - a_n) return false;
+			MEMORY_BASIC_INFORMATION mbi{};
+			if (VirtualQuery(reinterpret_cast<const void*>(a_p), &mbi, sizeof(mbi)) != sizeof(mbi) || mbi.State != MEM_COMMIT) return false;
+			if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return false;
+			const auto end = reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+			return a_p + a_n <= end;
+		}
+
+		// one 8-byte word, fault-guarded (no C++ objects here: __try cannot unwind them)
+		bool ReadWord(std::uintptr_t a_p, std::uintptr_t& a_out)
+		{
+			if (!Readable(a_p, sizeof(a_out))) return false;
+			__try {
+				a_out = *reinterpret_cast<const std::uintptr_t*>(a_p);
+				return true;
+			} __except (EXCEPTION_EXECUTE_HANDLER) {
+				return false;
+			}
+		}
+
+		// a_p is a live MagicEffect form: its formID (TESForm +0x10) looks up to this very pointer, and its type is
+		// MagicEffect - the round trip rules out a word that only happens to point at readable memory
+		bool IsMagicEffect(std::uintptr_t a_p)
+		{
+			if ((a_p & 7) != 0 || !Readable(a_p, 0x18)) return false;
+			std::uintptr_t word = 0;
+			if (!ReadWord(a_p + 0x10, word)) return false;
+			auto* form = RE::TESForm::LookupByID(static_cast<std::uint32_t>(word & 0xFFFFFFFFu));
+			return form && reinterpret_cast<std::uintptr_t>(form) == a_p && form->GetFormType() == RE::FormType::MagicEffect;
+		}
+
+		// The spell's first effect's EffectSetting. Found 2026-10-01: the 2026-09-30 search ran the WHOLE walk inside one
+		// __try, and its first candidate word (0x0000000800000000 - two u32 fields of the effect, read as a pointer) faulted
+		// on its +0x08 read (TestBench crash record 01:54:33, "reading address 0x800000008", ImprovedWheelMenu.dll) -
+		// the fault ended the search before it reached the real pointer, so every spell said "no effect read" and the Magic
+		// wheel drew empty until the magic menu's rows had shown the pictures. Each candidate is now checked on its own,
+		// never read unless the memory is readable, and believed only on a formID round trip. +0x00 is searched too.
 		RE::EffectSetting* FirstEffectRaw(RE::SpellItem* a_spell)
 		{
-			struct RawNode
-			{
-				const std::uint8_t* item;
-				const RawNode*      next;
-			};
-			__try {
-				// BSSimpleList keeps its first node inline: { item, next }
-				for (const auto* n = reinterpret_cast<const RawNode*>(&a_spell->effectList); n; n = n->next) {
-					if (!n->item) {
-						continue;
-					}
-					// the EffectSetting* field: OBSE's +0x20 read nothing in game (2026-09-30: "no effect read"), so the
-					// effect's first 0x60 bytes are searched for a pointer to a live MagicEffect form, and the offset kept
+			if (!a_spell) return nullptr;
+			// BSSimpleList keeps its first node inline: { item, next }
+			std::uintptr_t node = reinterpret_cast<std::uintptr_t>(&a_spell->effectList);
+			for (int guard = 0; node && guard < 16; ++guard) {
+				std::uintptr_t item = 0, next = 0;
+				if (!ReadWord(node, item) || !ReadWord(node + 8, next)) return nullptr;
+				if (item) {
 					static int s_offset = -1;
-					for (int off = s_offset >= 0 ? s_offset : 0x08; off <= (s_offset >= 0 ? s_offset : 0x58); off += 8) {
-						const auto raw = *reinterpret_cast<const std::uintptr_t*>(n->item + off);
-						if (raw < 0x10000 || (raw & 7) != 0) continue;
-						auto* form = reinterpret_cast<RE::TESForm*>(raw);
-						if (form->GetFormType() == RE::FormType::MagicEffect) {
-							if (s_offset < 0) {
-								s_offset = off;
-								g_effectOffset = off;
-							}
-							return reinterpret_cast<RE::EffectSetting*>(form);
+					const int from = s_offset >= 0 ? s_offset : 0x00, to = s_offset >= 0 ? s_offset : 0x58;
+					for (int off = from; off <= to; off += 8) {
+						std::uintptr_t raw = 0;
+						if (!ReadWord(item + static_cast<std::uintptr_t>(off), raw) || !IsMagicEffect(raw)) continue;
+						if (s_offset < 0) {
+							s_offset = off;
+							g_effectOffset = off;
 						}
+						return reinterpret_cast<RE::EffectSetting*>(raw);
 					}
-					return nullptr;
+					return nullptr;   // the first effect is the spell's picture
 				}
-			} __except (EXCEPTION_EXECUTE_HANDLER) {
+				node = next;
 			}
 			return nullptr;
 		}

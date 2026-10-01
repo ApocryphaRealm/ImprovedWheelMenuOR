@@ -5,6 +5,46 @@ in `git log`. A version number is issued by the version gate only once a build i
 
 ## Unreleased - 2026-09-29 - untested
 
+### Round 4 (2026-10-01) - four bugs from the owner's session of 01:35-01:56, built, not yet seen in game
+- **Fixed: RB closed the wheel but did not equip** (the owner: "I tried selecting an item and pressing RB, which closed
+  the wheel but didn't equip the weapon"). Log 01:52:39: "wheels: USE Equipment slot 2 now (RB) - the radial closes on
+  it", then "radial closed; the game uses slot 2 (top-right)" - but key 2 held the Steel Claymore (re.quickkeys) and the
+  bow stayed in hand. RB only logged and let go of the D-pad, trusting the radial's close to use the pointed key; "the game
+  uses slot N" was only the view model's KeyIndex read at the close, never proof of a use (that log line now says so).
+  Why the close did not use it is not proven: KeyIndex read 2 at the close and nothing of ours wrote it during that
+  session. RB - and now A, which the game no longer sees on the inventory wheel - closes the radial on nothing (the choice
+  cleared, the stick held centred until it has closed, as for the Magic wheel), and then runs the game's OWN direct
+  quick-key use: `VEnhancedAltarPlayerController::Quick<N>Input_Pressed` / `_Released` (no parameters, found by reflection
+  2026-10-01), what the number keys 1-8 run through Enhanced Input. The item is read back before and 0.7 s after
+  (count, worn, a menu opening): "USE result ... used through the game's own quick key N". If the radial's own close had
+  already used it, the key is not pressed again (never twice); if a weapon, shield, armour or torch is still not worn
+  after the press, it is equipped through Actor::EquipObject on the TES thread and logged FALLBACK.
+- **Fixed: LT / RT could not change the weapon** (log 01:50:56: "CYCLE Equipment slot 2 - 2 entries, nothing to step
+  to", x5). The wheel file (written 2026-09-30) had slot 2 = {Steel Bow} and slot 3 = {Steel Claymore, Steel Longsword},
+  while the loaded save's keys were claymore on 2, longsword on 3, bow on 4: slot 2 "picked up" the claymore and kept the
+  bow, which was slot 4's key, so the only other entry could never be stepped to while the counter said 2. At load (and
+  whenever the keys change under us) each keyed item now goes into its own slot and leaves every other slot's entries -
+  an item is on one slot ("... left Equipment slot N's entries - it is on slot M's key in the game"). Every entry LT / RT
+  passes over is named with its reason ("not carried" / "on slot N's key"), and the Equipment counter counts only the
+  entries LT / RT can reach. Reconciling waits while the game's own assign is being watched (it pre-empted Settle).
+- **Fixed: no centre rest snap visible on the inventory wheel.** The snap fired ("the right stick came back to rest -
+  the wheel points at no slot") but only wrote the view model's KeyIndex = -1; the highlight is the widget's own (its
+  Blueprint keeps QuickKeyID / HoveredKeyID / CurrentScaledKeyID and draws the selector through "Update Key Index" ->
+  UpdateFocusedKey). The snap now also calls the widget's "Update Key Index"(-1) - what the game itself calls as the
+  radial opens with nothing pointed - and logs the three Blueprint values before and after. If the game does not report
+  the slot again when the stick returns to the same slot after a snap, the slot is taken from the stick's angle after
+  three reads and pointed again ("pointed from the stick's angle"). The cancel message no longer adds one to KeyIndex,
+  which is already the slot number as drawn ("pointed at slot 3" was slot 2).
+- **Fixed: the Magic wheel looked empty until the magic menu had been opened** (the owner: "The magic wheel looks like
+  it's empty and has nothing in it until you go into the magic menu and bring up the wheel inside the magic menu then it
+  shows up when you go back in game"). Log 01:54:33: "rows: no icon for spell ... (no effect read)" for all three spells,
+  "0 with its picture known"; after the magic menu, "3 with its picture known" (the rows' pictures). TestBench's crash
+  record of 01:54:33 named it: an access violation in ImprovedWheelMenu.dll reading 0x800000008 - the spell-effect search
+  read two u32 fields of the effect (0x0000000800000000) as a pointer, faulted, and because one __try wrapped the whole
+  walk the fault ended the search before it reached the real EffectSetting pointer, for every spell. Each candidate is now
+  checked on its own, only after VirtualQuery says it is readable (no first-chance fault for TestBench to record), and
+  believed only when its formID looks up to the same pointer as a MagicEffect; +0x00 is searched too.
+
 ### Round 3 (in progress, 2026-09-30)
 - Diagnostics: one "pad: radial session" line per HUD radial open - reads on our thread and on other threads (which the
   rules never touch), the largest LT / RT and stick values, the trigger presses seen, pointed-slot changes, rest snaps and

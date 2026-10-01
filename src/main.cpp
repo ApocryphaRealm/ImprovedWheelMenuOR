@@ -57,7 +57,10 @@ namespace
 			logger::debug("points at slot {} ({})", a_slot, SlotWord(a_slot));
 			break;
 		case quickkeys::Event::kClosed:
-			logger::info("radial closed; the game uses slot {} ({})", a_slot, SlotWord(a_slot));
+			// only the view model's KeyIndex as it reads at the close - not proof that the game used anything (2026-10-01
+			// 01:52:39 read "slot 2" and nothing was equipped); an RB / A use is read back from the item ("USE result")
+			logger::info("radial closed; the view model's KeyIndex reads {} ({})", a_slot >= 1 && a_slot <= 8 ? std::format("slot {}", a_slot) : std::string("no slot"),
+				SlotWord(a_slot));
 			wheels::RadialHidden();
 			break;
 		case quickkeys::Event::kPanelOpened:

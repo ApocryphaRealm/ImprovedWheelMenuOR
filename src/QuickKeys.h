@@ -41,6 +41,14 @@ namespace quickkeys
 	UE::UObject* VisibleWheel();   // the first wheel widget whose own visibility says shown, or nullptr
 	int  PointedSlot();  // the slot under the pointer on whichever is showing, -1 for none
 	void CancelChoice(); // B on the HUD radial: the view model points at no slot, so the close uses nothing
+	// the centre rest snap: CancelChoice, and the wheel's own highlight cleared ("Update Key Index"(-1) on the widget)
+	void ClearPointer();
+	// the wheel points at key a_key (0-7) again - widget highlight and view model - when the stick came back to a slot
+	// after a rest snap and the game did not say so itself
+	void Repoint(int a_key);
+	// the game's own direct use of quick key a_key (0-7) - the player controller's Quick<N>Input_Pressed / _Released,
+	// what the number keys 1-8 run. Game thread. False when the call could not be made.
+	bool PressQuickKey(int a_key);
 
 	// The eight slot pictures the radial and the menu panels draw (VQuickKeysMenuViewModel::Icons, by key 0-7).
 	// WriteIcons pushes a set through the view model's own SetIcons on every instance; returns how many took it.
