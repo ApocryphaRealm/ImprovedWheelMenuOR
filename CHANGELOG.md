@@ -3,6 +3,14 @@
 Written as changes happen, not reconstructed afterwards (rule 61). Started 2026-09-29; the history before this file is
 in `git log`. A version number is issued by the version gate only once a build is seen working in game (rule 48).
 
+## 1.0.1 - 2026-10-02 - untested
+
+### Fixed
+- A quick tap of the wheel button let go before the wheel had shown no longer lets the game close it again: the button is held for the game until the wheel shows (at most 0.6 s), then the wheel stays open until the next press, as a tap is meant to. On a Steam Deck under Proton the wheel shows a few frames after the press, so an ordinary tap was already up and the Equipment wheel closed about 270 ms after opening (SaintAnhel's report, 2026-10-02).
+
+### Added
+- The log names every wheel-button press and release in gameplay with its length, the time from the press to the wheel showing, a line when the game runs under Wine / Proton, and a warning when a second controller index is connected (only controller 0 is rewritten).
+
 ## 1.0.0 - 2026-10-01 - working
 
 The first release. Confirmed by the owner in game on b259746 (DLL sha1 3b18f33ee342, the 05:59 launch): "Unless I'm

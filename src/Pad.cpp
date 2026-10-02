@@ -23,6 +23,10 @@ namespace pad
 		using Clock = std::chrono::steady_clock;
 
 		constexpr auto  kHoldThreshold = 250ms;   // the Skyrim Perfected Wheeler's ToggleHoldThreshold (0.25 s)
+		// A tap let go before the wheel has shown stays held for the game this long at most, waiting for it to show.
+		// The wheel shows a few frames after the press - on a Steam Deck (30-40 fps, Proton) often after a quick tap is
+		// already up, and the game then finished its own tap and closed the wheel ~0.3 s later (SaintAnhel, 2026-10-02).
+		constexpr auto  kPendingLatchLimit = 600ms;
 		constexpr int   kPulseReads = 4;          // a synthetic press is held for this many reads, then let go
 		constexpr BYTE  kTriggerOn = XINPUT_GAMEPAD_TRIGGER_THRESHOLD;   // 30
 
@@ -104,6 +108,9 @@ namespace pad
 		bool              g_latched = false;
 		bool              g_suppressDown = false;   // let the game see D-pad down UP until the physical button is released
 		Clock::time_point g_gameDownAt{};
+		bool              g_pendingLatch = false;   // tapped before the wheel showed: held for the game until it does
+		Clock::time_point g_pendingSince{};
+		bool              g_sawRadialOpen = false;  // the radial's open edge, for the press-to-shown time in the log
 
 		int  g_pulseDown = 0;   // reads left of a replayed D-pad down tap
 		bool g_swallowB = false;   // B was used to back out of the panel / radial: the game never sees it, until let go
@@ -344,6 +351,7 @@ namespace pad
 				ammo::Rewrite(a_pad, raw, 0, untouched, false, false);
 				a_pad.wButtons = raw;
 				g_latched = false;
+				g_pendingLatch = false;
 				g_suppressDown = false;
 				return;
 			}
@@ -384,6 +392,7 @@ namespace pad
 				SetMagicPanel(false);
 				if (menu != menus::Menu::kNone) {
 					g_latched = false;       // a menu opening ends a latched wheel
+					g_pendingLatch = false;
 					g_suppressDown = false;
 				}
 				g_prevMenu = menu;
@@ -484,29 +493,57 @@ namespace pad
 					}
 				}
 				// ---- gameplay ----
+				const auto sinceDown = [&]() { return std::chrono::duration_cast<std::chrono::milliseconds>(now - g_gameDownAt).count(); };
+				const bool radialOpen = quickkeys::RadialOpen();
+				if (radialOpen && !g_sawRadialOpen) {
+					logger::info("pad: the wheel showed {} ms after the wheel button went down", sinceDown());
+				}
+				g_sawRadialOpen = radialOpen;
+				if (g_pendingLatch) {
+					if (radialOpen) {
+						g_pendingLatch = false;
+						g_latched = true;        // the tap that came before the wheel: it stays open until the next press
+						logger::info("pad: the tapped wheel showed - it stays open until the next press");
+					} else if (now - g_pendingSince > kPendingLatchLimit) {
+						g_pendingLatch = false;  // never leave the button held for the game when no wheel came
+						logger::warn("pad: no wheel showed within {} ms of the tap - the wheel button is let go", kPendingLatchLimit.count());
+					}
+				}
 				if (pressed & XINPUT_GAMEPAD_DPAD_DOWN) {
 					if (g_latched) {
 						g_latched = false;
 						g_suppressDown = true;   // the game sees the button go up: the wheel closes - on nothing
-						if (quickkeys::RadialOpen()) {
+						if (radialOpen) {
 							CloseOnNothing("the wheel button pressed again");
 						}
 					} else {
+						if (g_pendingLatch) {
+							g_pendingLatch = false;   // pressed again before the wheel showed: this press decides
+							logger::info("pad: wheel button pressed again before the wheel showed - this press is timed instead");
+						}
 						g_gameDownAt = now;
+						logger::debug("pad: wheel button down (wheel open: {})", radialOpen);
 					}
 				}
 				if (released & XINPUT_GAMEPAD_DPAD_DOWN) {
 					if (g_suppressDown) {
 						g_suppressDown = false;
-					} else if (now - g_gameDownAt < kHoldThreshold && quickkeys::RadialOpen()) {
+						logger::debug("pad: wheel button up after {} ms - already handled", sinceDown());
+					} else if (now - g_gameDownAt < kHoldThreshold && radialOpen) {
 						g_latched = true;        // a tap: the wheel stays open until the next press
-						logger::info("pad: wheel button tapped - the wheel stays open until the next press");
-					} else if (quickkeys::RadialOpen()) {
+						logger::info("pad: wheel button tapped ({} ms) - the wheel stays open until the next press", sinceDown());
+					} else if (now - g_gameDownAt < kHoldThreshold) {
+						g_pendingLatch = true;   // a tap let go before the wheel showed: keep it held for the game until it does
+						g_pendingSince = now;
+						logger::info("pad: wheel button tapped ({} ms) before the wheel showed - held for the game until it opens", sinceDown());
+					} else if (radialOpen) {
 						CloseOnNothing("the wheel button let go");   // a hold let go: nothing used, on either wheel
+					} else {
+						logger::info("pad: wheel button up after {} ms and no wheel showed", sinceDown());
 					}
 				}
 				out &= ~XINPUT_GAMEPAD_DPAD_DOWN;
-				if (((raw & XINPUT_GAMEPAD_DPAD_DOWN) && !g_suppressDown) || g_latched) {
+				if (((raw & XINPUT_GAMEPAD_DPAD_DOWN) && !g_suppressDown) || g_latched || g_pendingLatch) {
 					out |= XINPUT_GAMEPAD_DPAD_DOWN;
 				}
 				if (!quickkeys::RadialOpen()) {
@@ -629,6 +666,16 @@ namespace pad
 				}
 			}
 			DWORD rc = g_previous ? g_previous(a_user, a_state) : ERROR_DEVICE_NOT_CONNECTED;
+			if (a_user != 0 && a_user < 4 && rc == ERROR_SUCCESS) {
+				// Only user 0 is rewritten. Under Proton the one pad can sit on two indices (Steam's virtual pad and the
+				// Deck's own HID device), and a second index would hand the game the buttons the wheel holds back.
+				static std::atomic<std::uint32_t> s_seen{ 0 };
+				const std::uint32_t bit = 1u << a_user;
+				if (!(s_seen.fetch_or(bit, std::memory_order_relaxed) & bit)) {
+					logger::warn("pad: controller {} is connected too - only controller 0's reads are rewritten, so a second "
+								 "pad (or the same pad seen twice under Proton) reaches the game untouched", a_user);
+				}
+			}
 			if (!a_state || a_user != 0) {
 				return rc;
 			}
@@ -687,6 +734,14 @@ namespace pad
 		}
 		s_tried = true;
 		g_gameThread = GetCurrentThreadId();   // Install runs at OBSE's post-load, on the game's main thread
+		// Wine and Proton answer this ntdll export; a Steam Deck report then says what it runs on.
+		if (const auto ntdll = GetModuleHandleW(L"ntdll.dll")) {
+			using WineVersion_t = const char*(__cdecl*)();
+			if (const auto wineVersion = reinterpret_cast<WineVersion_t>(GetProcAddress(ntdll, "wine_get_version"))) {
+				const char* v = wineVersion();
+				logger::info("pad: running under Wine / Proton {} (the game thread is {})", v ? v : "(no version)", g_gameThread);
+			}
+		}
 		auto* base = reinterpret_cast<std::uint8_t*>(GetModuleHandleW(nullptr));
 		const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
 		const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(base + dos->e_lfanew);
