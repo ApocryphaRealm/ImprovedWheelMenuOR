@@ -109,6 +109,7 @@ namespace pad
 		bool              g_suppressDown = false;   // let the game see D-pad down UP until the physical button is released
 		Clock::time_point g_gameDownAt{};
 		bool              g_pendingLatch = false;   // tapped before the wheel showed: held for the game until it does
+		bool              g_downInMenu = false;     // a menu (not the wheel - it only opens after the press) was up at the press
 		Clock::time_point g_pendingSince{};
 		bool              g_sawRadialOpen = false;  // the radial's open edge, for the press-to-shown time in the log
 
@@ -522,7 +523,10 @@ namespace pad
 							logger::info("pad: wheel button pressed again before the wheel showed - this press is timed instead");
 						}
 						g_gameDownAt = now;
-						logger::debug("pad: wheel button down (wheel open: {})", radialOpen);
+						// The wheel is a TES menu too, but it is not open yet at its own press, so a menu up now is a real
+						// one (the system menu, a container): D-pad down there is list navigation and is never held.
+						g_downInMenu = !radialOpen && menus::AnyOpen();
+						logger::debug("pad: wheel button down (wheel open: {}, in a menu: {})", radialOpen, g_downInMenu);
 					}
 				}
 				if (released & XINPUT_GAMEPAD_DPAD_DOWN) {
@@ -532,7 +536,7 @@ namespace pad
 					} else if (now - g_gameDownAt < kHoldThreshold && radialOpen) {
 						g_latched = true;        // a tap: the wheel stays open until the next press
 						logger::info("pad: wheel button tapped ({} ms) - the wheel stays open until the next press", sinceDown());
-					} else if (now - g_gameDownAt < kHoldThreshold) {
+					} else if (now - g_gameDownAt < kHoldThreshold && !g_downInMenu) {
 						g_pendingLatch = true;   // a tap let go before the wheel showed: keep it held for the game until it does
 						g_pendingSince = now;
 						logger::info("pad: wheel button tapped ({} ms) before the wheel showed - held for the game until it opens", sinceDown());

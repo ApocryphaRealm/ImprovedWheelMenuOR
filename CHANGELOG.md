@@ -11,6 +11,9 @@ in `git log`. A version number is issued by the version gate only once a build i
 ### Added
 - The log names every wheel-button press and release in gameplay with its length, the time from the press to the wheel showing, a line when the game runs under Wine / Proton, and a warning when a second controller index is connected (only controller 0 is rewritten).
 
+### Changed
+- The held tap only applies in gameplay: a quick D-pad down in the system menu, a container or a barter list is never held, so it cannot repeat a list scroll.
+
 ## 1.0.0 - 2026-10-01 - working
 
 The first release. Confirmed by the owner in game on b259746 (DLL sha1 3b18f33ee342, the 05:59 launch): "Unless I'm
